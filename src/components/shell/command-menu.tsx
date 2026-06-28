@@ -41,7 +41,7 @@ import {
   SEARCH_INBOX_EVENT,
   applyTileLayout,
   listWorkspaces,
-  loadCurrentLayout,
+  loadLayout,
   removeWorkspace,
   saveWorkspace,
   type SearchInboxDetail,
@@ -222,7 +222,7 @@ export function CommandMenu({
           label: "Save board as workspace…",
           icon: <SaveIcon />,
           action: () => {
-            const tree = loadCurrentLayout();
+            const tree = loadLayout();
             if (!tree) {
               toast("Nothing to save yet — open some panes first.");
               return;

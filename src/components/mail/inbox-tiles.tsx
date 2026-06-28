@@ -4,9 +4,8 @@ import {
   READER_PANE_ID,
   RESET_TILE_LAYOUT_EVENT,
   SEARCH_INBOX_EVENT,
-  TILE_LAYOUT_KEY,
-  parseStoredTree,
-  type LayoutNode,
+  loadLayout,
+  persistLayout,
   type SearchInboxDetail,
 } from "@/lib/layout-tree";
 import { TileBoard, type TileStorage } from "@/components/tile-board";
@@ -29,28 +28,6 @@ import {
   type Reading,
   type TilesCtx,
 } from "./tiles-context";
-
-const STORAGE_KEY = TILE_LAYOUT_KEY;
-
-function loadStoredTree(): LayoutNode | null {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { v?: number; tree?: unknown };
-    return parsed?.v === 3 ? parseStoredTree(parsed.tree) : null;
-  } catch {
-    return null;
-  }
-}
-
-function persistTree(tree: LayoutNode | null) {
-  try {
-    if (tree === null) localStorage.removeItem(STORAGE_KEY);
-    else localStorage.setItem(STORAGE_KEY, JSON.stringify({ v: 3, tree }));
-  } catch {
-    // storage unavailable — layout just won't persist
-  }
-}
 
 export function InboxTiles({
   accounts,
@@ -230,7 +207,7 @@ export function InboxTiles({
     portalContainer,
   };
 
-  const storage: TileStorage = { load: loadStoredTree, save: persistTree };
+  const storage: TileStorage = { load: loadLayout, save: persistLayout };
 
   // Single dispatch: classify the pane id, then look up its renderer/label in the registry.
   const paneCtx: PaneRenderCtx = {

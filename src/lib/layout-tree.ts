@@ -213,15 +213,35 @@ function isLayoutNode(value: unknown): value is LayoutNode {
 /** localStorage key for the live tile layout (the board persists here). */
 export const TILE_LAYOUT_KEY = "bm.tiles-layout";
 
-/** The tile layout the board currently persists, or null (= default layout). */
-export function loadCurrentLayout(): LayoutNode | null {
+/** Schema version for the persisted layout envelope ({ v, tree }). Bump when the
+ *  node shape changes, and add a branch in loadLayout to migrate the old shape. */
+export const LAYOUT_VERSION = 3;
+
+/** Load + parse the persisted tile layout (single source of truth for the load
+ *  path — the board, the demo, and ⌘K all go through here). null = default. */
+export function loadLayout(): LayoutNode | null {
   try {
     const raw = localStorage.getItem(TILE_LAYOUT_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as { v?: number; tree?: unknown };
-    return parsed?.v === 3 ? parseStoredTree(parsed.tree) : null;
+    return parsed?.v === LAYOUT_VERSION ? parseStoredTree(parsed.tree) : null;
   } catch {
     return null;
+  }
+}
+
+/** Persist (or clear) the live tile layout. Counterpart to loadLayout. */
+export function persistLayout(tree: LayoutNode | null): void {
+  try {
+    if (tree === null) localStorage.removeItem(TILE_LAYOUT_KEY);
+    else {
+      localStorage.setItem(
+        TILE_LAYOUT_KEY,
+        JSON.stringify({ v: LAYOUT_VERSION, tree }),
+      );
+    }
+  } catch {
+    // storage unavailable — layout just won't persist
   }
 }
 
