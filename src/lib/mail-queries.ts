@@ -7,6 +7,7 @@ import {
 import type { ThreadRowEmail } from "@/components/mail/thread-row";
 import type { Account } from "@/lib/account";
 import { FOLDER_QUERY, type Folder } from "@/lib/folders";
+import { isSendingDisabled } from "@/hooks/use-settings";
 import {
   isTestAccount,
   makeTestEmails,
@@ -417,6 +418,12 @@ export async function sendNewEmail(options: {
   attachments?: { filename: string; mimeType: string; contentBase64: string }[];
 }) {
   if (isTestAccount(options.accountId)) return;
+  // Owner "Simulate send": resolve as success without hitting Gmail. The short
+  // delay keeps the composer's "Sending…" state visible so the demo looks real.
+  if (isSendingDisabled()) {
+    await new Promise((resolve) => setTimeout(resolve, 600));
+    return;
+  }
   await fetchJson("/api/send", {
     method: "POST",
     headers: { "content-type": "application/json" },

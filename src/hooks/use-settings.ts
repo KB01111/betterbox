@@ -41,6 +41,8 @@ export type Settings = {
   devTools: boolean;
   /** Hides real accounts, runs on demo data — for recording without exposing real mail. */
   demoMode: boolean;
+  /** Send looks successful (spinner, toast, close) but no email is dispatched — for recording. */
+  disableSending: boolean;
 };
 
 const STORAGE_KEY = "bm.settings";
@@ -62,6 +64,7 @@ const DEFAULT_SETTINGS: Settings = {
   hiddenNav: [],
   devTools: false,
   demoMode: false,
+  disableSending: false,
 };
 
 export const MARK_READ_MS: Record<MarkRead, number | null> = {
@@ -115,6 +118,12 @@ export function useSettings(): Settings {
 /** Account-scoped data gates on isTestAccount(accountId); user-global data gates on this. */
 export function isDemoMode(): boolean {
   return snapshot().demoMode;
+}
+
+/** When on, sends are simulated (see sendNewEmail) — the UI reports success but
+ *  nothing is dispatched. Read outside React, so it uses the store snapshot. */
+export function isSendingDisabled(): boolean {
+  return snapshot().disableSending;
 }
 
 export function updateSettings(patch: Partial<Settings>) {

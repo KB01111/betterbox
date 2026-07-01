@@ -39,6 +39,17 @@ export function OwnerPage() {
             onCheckedChange={(devTools) => updateSettings({ devTools })}
           />
         </SettingRow>
+        <SettingRow
+          label="Simulate send"
+          description="Send looks successful — spinner, toast, and close — but no email is actually dispatched. For recording."
+        >
+          <Switch
+            checked={settings.disableSending}
+            onCheckedChange={(disableSending) =>
+              updateSettings({ disableSending })
+            }
+          />
+        </SettingRow>
       </PageSection>
     </Page>
   );
