@@ -21,8 +21,8 @@ import { cn } from "@/lib/utils";
 
 import { COL, PulseDot } from "./primitives";
 
-/** Demo walkthrough video for mobile/tablet (live multi-pane demo isn't meaningful
- *  there). Empty → "coming soon" placeholder. Kept in sync with the README video slot. */
+/** Demo walkthrough video. Empty → "coming soon" placeholder. Kept in sync with
+ *  the README video slot. */
 const DEMO_VIDEO_URL: string = "/betterbox-demo.mp4";
 
 const isYouTube = (url: string) =>
@@ -39,17 +39,12 @@ export function Demo() {
     <section className={cn(COL, "py-10 sm:py-16")}>
       <div className="mb-3 flex items-center gap-2 font-mono text-xs text-muted-foreground">
         <PulseDot />
-        live demo · sample data
+        demo · sample data
       </div>
-      <div className="hidden rounded-2xl border border-border bg-card p-2.5 md:block">
-        <div className="relative h-[680px] overflow-hidden rounded-lg bg-background">
-          <LandingDemo />
-        </div>
-      </div>
-      {/* Mobile/tablet: live multi-pane app isn't meaningful at phone widths —
-          walkthrough video goes here instead, driven by DEMO_VIDEO_URL; falls
-          back to a placeholder until a URL is set. */}
-      <div className="rounded-2xl border border-border bg-card p-2.5 md:hidden">
+      {/* Walkthrough video, driven by DEMO_VIDEO_URL; falls back to a
+          placeholder until a URL is set. (The live LandingDemo is currently
+          broken and hidden — restore it here once fixed.) */}
+      <div className="rounded-2xl border border-border bg-card p-2.5">
         {DEMO_VIDEO_URL ? (
           isYouTube(DEMO_VIDEO_URL) ? (
             <iframe
@@ -76,9 +71,6 @@ export function Demo() {
             </span>
             <p className="text-sm text-pretty text-muted-foreground">
               Walkthrough video coming soon.
-            </p>
-            <p className="font-mono text-[11px] text-muted-foreground/60">
-              try it on a desktop for the live demo
             </p>
           </div>
         )}
