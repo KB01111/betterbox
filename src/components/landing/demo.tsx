@@ -37,10 +37,6 @@ function youTubeEmbedUrl(url: string): string {
 export function Demo() {
   return (
     <section className={cn(COL, "py-10 sm:py-16")}>
-      <div className="mb-3 flex items-center gap-2 font-mono text-xs text-muted-foreground">
-        <PulseDot />
-        demo · sample data
-      </div>
       {/* Walkthrough video, driven by DEMO_VIDEO_URL; falls back to a
           placeholder until a URL is set. (The live LandingDemo is currently
           broken and hidden — restore it here once fixed.) */}
