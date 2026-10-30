@@ -91,7 +91,7 @@ try {
   );
   assert.equal(response.status, 401);
   response = await fetchAs(
-    "/api/image-proxy?url=https%3A%2F%2Fimages.example.test%2Fpixel",
+    "/api/image-proxy?url=https%3A%2F%2Fwww.example.com%2Fpixel",
     "owner",
   );
   assert.equal(response.status, 400);
