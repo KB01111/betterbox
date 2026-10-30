@@ -8,6 +8,11 @@ import {
 } from "@/lib/mail-queries";
 import { mergeMailPages } from "@/lib/unified-mail";
 import type { Folder } from "@/lib/folders";
+import {
+  desktopBridge,
+  DESKTOP_REFRESH_EVENT,
+} from "@/lib/auth/desktop-bridge";
+import { shouldPassiveRefresh } from "./refresh-guard";
 
 /** One bounded request per account/page. Mail exists only in Query's memory cache. */
 export function useUnifiedMail(
@@ -17,6 +22,16 @@ export function useUnifiedMail(
 ) {
   const client = useQueryClient();
   const identity = JSON.stringify([accountIds, folder, search]);
+  // Keep a small in-memory history when switching folders/accounts repeatedly.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scope changes make the previous page chain inactive.
+  useEffect(() => {
+    const inactive = client
+      .getQueryCache()
+      .findAll({ queryKey: ["unified-mail"], type: "inactive" })
+      .sort((a, b) => b.state.dataUpdatedAt - a.state.dataUpdatedAt);
+    for (const query of inactive.slice(60))
+      client.removeQueries({ queryKey: query.queryKey, exact: true });
+  }, [client, identity]);
   const [paging, setPaging] = useState<{
     identity: string;
     tokens: Record<string, string[]>;
@@ -104,6 +119,7 @@ export function useUnifiedMail(
   };
 
   const lastRefresh = useRef(0);
+  const hasHistory = Object.values(tokens).some((pages) => pages.length > 0);
   const accountKey = JSON.stringify(accountIds);
   const refresh = useCallback(() => {
     lastRefresh.current = Date.now();
@@ -130,22 +146,28 @@ export function useUnifiedMail(
   useEffect(() => {
     const foreground = () => {
       if (
-        document.visibilityState === "visible" &&
-        Date.now() - lastRefresh.current > 15_000
+        shouldPassiveRefresh(
+          document.visibilityState === "visible",
+          hasHistory,
+          Date.now(),
+          lastRefresh.current,
+        )
       )
         refresh();
     };
-    const timer = window.setInterval(() => {
-      if (document.visibilityState === "visible") refresh();
-    }, 60_000);
+    const timer = desktopBridge("mail")
+      ? undefined
+      : window.setInterval(foreground, 60_000);
     window.addEventListener("focus", foreground);
+    window.addEventListener(DESKTOP_REFRESH_EVENT, foreground);
     document.addEventListener("visibilitychange", foreground);
     return () => {
       clearInterval(timer);
       window.removeEventListener("focus", foreground);
+      window.removeEventListener(DESKTOP_REFRESH_EVENT, foreground);
       document.removeEventListener("visibilitychange", foreground);
     };
-  }, [refresh]);
+  }, [refresh, hasHistory]);
 
   // A refreshed first page invalidates the tokens derived from its previous snapshot.
   const firstVersions = useMemo(

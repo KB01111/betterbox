@@ -8,6 +8,17 @@ use url::Url;
 pub const HOST: &str = "betterbox.kevinjbridgelal.workers.dev";
 pub const ORIGIN: &str = "https://betterbox.kevinjbridgelal.workers.dev";
 
+pub fn recovery(url: &Url) -> bool {
+    url.scheme() == "http"
+        && url.host_str() == Some("tauri.localhost")
+        && url.port_or_known_default() == Some(80)
+        && matches!(url.path(), "/" | "/index.html")
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && url.username().is_empty()
+        && url.password().is_none()
+}
+
 pub fn trusted(url: &Url) -> bool {
     url.scheme() == "https"
         && url.host_str() == Some(HOST)
@@ -95,15 +106,33 @@ pub fn redeem_status(status: u16) -> Result<bool, &'static str> {
     match status {
         200 => Ok(true),
         202 => Ok(false),
-        410 => Err("This sign-in request expired or was used. Start again in BetterBox."),
-        403 => Err("This sign-in request was rejected. Start again in BetterBox."),
-        _ => Err("BetterBox could not complete sign-in. Start again in BetterBox."),
+        410 => Err("This sign-in request expired or was used. Start again in KB OneMail."),
+        403 => Err("This sign-in request was rejected. Start again in KB OneMail."),
+        _ => Err("KB OneMail could not complete sign-in. Start again in KB OneMail."),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn recovery_is_only_the_bundled_windows_document() {
+        assert!(recovery(&Url::parse("http://tauri.localhost/").unwrap()));
+        assert!(recovery(
+            &Url::parse("http://tauri.localhost/index.html").unwrap()
+        ));
+        for value in [
+            "http://tauri.localhost.evil/index.html",
+            "http://tauri.localhost:9999/index.html",
+            "https://tauri.localhost/index.html",
+            "http://tauri.localhost/other.html",
+            "http://user@tauri.localhost/index.html",
+            "tauri://anything/index.html",
+        ] {
+            assert!(!recovery(&Url::parse(value).unwrap()), "{value}");
+        }
+    }
 
     #[test]
     fn trust_is_exact_https_origin_without_credentials() {

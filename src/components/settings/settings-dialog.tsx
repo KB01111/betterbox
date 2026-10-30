@@ -39,6 +39,8 @@ import { SignaturesPage } from "./pages/signatures";
 import { DeveloperPage } from "./pages/developer";
 import { KeyboardPage } from "./pages/keyboard";
 import { OwnerPage } from "./pages/owner";
+import { DesktopPage } from "./pages/desktop";
+import { desktopBridge } from "@/lib/auth/desktop-bridge";
 
 export type PageId =
   | "accounts"
@@ -50,7 +52,8 @@ export type PageId =
   | "signatures"
   | "developer"
   | "keyboard"
-  | "owner";
+  | "owner"
+  | "desktop";
 
 type NavGroup = {
   section: string;
@@ -98,9 +101,13 @@ const OWNER_NAV: NavGroup = {
 };
 
 const PAGE_META: Record<PageId, { title: string; description: string }> = {
+  desktop: {
+    title: "Desktop",
+    description: "Windows notifications, background mail and updates",
+  },
   appearance: {
     title: "Appearance",
-    description: "Choose how BetterBox looks",
+    description: "Choose how KB OneMail looks",
   },
   inbox: { title: "Inbox", description: "Row content and reading behavior" },
   composer: {
@@ -165,7 +172,16 @@ export function SettingsDialog({
   }, [open, initialPage]);
   const { data: session } = useSession();
   const isOwner = session?.user.role === "OWNER";
-  const nav = isOwner ? [...NAV, OWNER_NAV] : NAV;
+  const baseNav = desktopBridge("settings")
+    ? [
+        ...NAV,
+        {
+          section: "Desktop",
+          pages: [{ id: "desktop" as const, label: "Desktop", icon: MailIcon }],
+        },
+      ]
+    : NAV;
+  const nav = isOwner ? [...baseNav, OWNER_NAV] : baseNav;
 
   const openPrivacy = () => {
     onOpenChange(false);
@@ -180,7 +196,7 @@ export function SettingsDialog({
       >
         <DialogHeader className="sr-only">
           <DialogTitle>Settings</DialogTitle>
-          <DialogDescription>BetterBox preferences</DialogDescription>
+          <DialogDescription>KB OneMail preferences</DialogDescription>
         </DialogHeader>
 
         {/* Mobile: a scrollable strip of pages (desktop column doesn't fit),
@@ -229,7 +245,7 @@ export function SettingsDialog({
 
         <nav className="hidden w-48 shrink-0 flex-col gap-1 border-r bg-sidebar p-3 sm:flex">
           <div className="flex items-center gap-2 px-1.5 pt-1 pb-3">
-            <span className="flex size-[18px] items-center justify-center rounded bg-primary text-on-primary">
+            <span className="flex size-[18px] items-center justify-center rounded bg-[#2563EB] text-white">
               <MailIcon className="size-3" />
             </span>
             <span className="font-mono text-xs font-semibold">Settings</span>
@@ -292,6 +308,7 @@ export function SettingsDialog({
           </div>
           <div className="min-w-0 flex-1 overflow-y-auto p-4 sm:p-6">
             {page === "accounts" && <AccountsPage accounts={accounts} />}
+            {page === "desktop" && desktopBridge("settings") && <DesktopPage />}
             {page === "appearance" && <AppearancePage />}
             {page === "inbox" && <InboxPage />}
             {page === "composer" && <ComposerPage accounts={accounts} />}

@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-/** The BetterBox source repository. */
+/** The KB OneMail source repository. */
 export const GITHUB_URL = "https://github.com/aidankmcalister/betterbox";
 
 /** GitHub logo mark — lucide dropped its brand glyphs, so it lives here once. */

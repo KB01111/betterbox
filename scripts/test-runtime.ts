@@ -91,6 +91,25 @@ try {
   let response = await fetchAs("/api/accounts");
   assert.equal(response.status, 401);
   check("anonymous mailbox access blocked in workerd");
+  response = await fetchAs("/api/native-mail", undefined, {
+    method: "POST", headers: { origin, "content-type": "application/json" },
+    body: JSON.stringify({ accountId: "111" }),
+  });
+  assert.equal(response.status, 401);
+  assert.match(response.headers.get("cache-control") ?? "", /no-store/);
+  response = await post("/api/native-mail", "owner", { accountId: "444" });
+  assert.equal(response.status, 403);
+  assert.match(response.headers.get("cache-control") ?? "", /no-store/);
+  response = await fetchAs("/api/native-mail", "owner", {
+    method: "POST", headers: { origin: "https://attacker.test", "content-type": "application/json" },
+    body: JSON.stringify({ accountId: "111" }),
+  });
+  assert.equal(response.status, 403);
+  response = await post("/api/native-mail", "owner", { accountId: "111", cursor: "../invalid" });
+  assert.equal(response.status, 400);
+  response = await post("/api/native-mail", "owner", { accountId: "111", padding: "x".repeat(8192) });
+  assert.equal(response.status, 413);
+  check("native polling enforces session, account ownership, origin, bounds and no-store");
   response = await fetchAs(
     "/api/image-proxy?url=https%3A%2F%2Fimages.example.test%2Fpixel",
   );

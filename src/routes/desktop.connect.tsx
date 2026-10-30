@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth/auth-client";
 import { desktopConnectSearch } from "@/lib/auth/desktop-client";
+import { usePublicDesktopLifecycle } from "@/hooks/use-public-desktop";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
@@ -14,6 +15,7 @@ export const Route = createFileRoute("/desktop/connect")({
 type Status = { mode: string; userCode: string; signedIn: boolean; matchesUser: boolean; email: string | null };
 
 function DesktopConnect() {
+  usePublicDesktopLifecycle();
   const { id, connected, error: callbackError } = Route.useSearch();
   const [status, setStatus] = useState<Status>();
   const [error, setError] = useState(callbackError ? "Google connection did not complete. Try again from the desktop app." : "");
@@ -59,22 +61,22 @@ function DesktopConnect() {
   return <main className="flex min-h-svh items-center justify-center bg-background p-6 text-foreground">
     <Card className="w-full max-w-md">
       <CardHeader>
-        <CardTitle>Connect BetterBox desktop</CardTitle>
+        <CardTitle>Connect KB OneMail desktop</CardTitle>
         <CardDescription>{approved ? "Connection approved. Return to the desktop app." : "Only approve a request you started on your own computer."}</CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
         {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         {status && !approved && <>
-          <p className="text-sm text-muted-foreground">Check that this code matches the code in your BetterBox desktop window.</p>
+          <p className="text-sm text-muted-foreground">Check that this code matches the code in your KB OneMail desktop window.</p>
           <p className="rounded-md bg-muted p-4 text-center font-mono text-2xl tracking-widest">{status.userCode}</p>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={matchesCode} onChange={(event) => setMatchesCode(event.target.checked)} />The codes match, and I started this request.</label>
           {!status.signedIn ? <Button disabled={busy || !matchesCode} onClick={connect}>Sign in with Google</Button> : !status.matchesUser ? <>
-            <p className="text-sm">Sign in with the same primary BetterBox account as the desktop app to link mailboxes.</p>
+            <p className="text-sm">Sign in with the same primary KB OneMail account as the desktop app to link mailboxes.</p>
             <Button variant="outline" onClick={async () => { await authClient.signOut(); window.location.reload(); }}>Use another account</Button>
           </> : <>
             <p className="font-mono text-sm">{status.email}</p>
             {status.mode !== "signin" && !connected ? <Button disabled={busy || !matchesCode} onClick={connect}>Connect {status.mode === "github" ? "GitHub" : "Google account"}</Button> : <>
-              <p className="text-sm text-muted-foreground">This gives the desktop app access to your BetterBox workspace and its linked accounts.</p>
+              <p className="text-sm text-muted-foreground">This gives the desktop app access to your KB OneMail workspace and its linked accounts.</p>
               <Button disabled={busy || !matchesCode} onClick={approve}>Approve desktop connection</Button>
             </>}
           </>}

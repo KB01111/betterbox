@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router";
 import { MailIcon } from "lucide-react";
+import { usePublicDesktopLifecycle } from "@/hooks/use-public-desktop";
 
 export function NotFound() {
+  usePublicDesktopLifecycle();
   return (
     <main className="grid min-h-svh w-full place-items-center bg-canvas text-ink">
       <div className="flex flex-col items-center gap-6 px-6 text-center">
@@ -9,10 +11,10 @@ export function NotFound() {
           to="/"
           className="inline-flex items-center gap-2.5 text-ink-subtle transition-colors hover:text-ink"
         >
-          <span className="inline-flex size-8 items-center justify-center rounded-lg bg-primary text-on-primary">
+          <span className="inline-flex size-8 items-center justify-center rounded-lg bg-[#2563EB] text-white">
             <MailIcon className="size-5" />
           </span>
-          <span className="font-mono text-[13px] font-semibold">BetterBox</span>
+          <span className="font-mono text-[13px] font-semibold">KB OneMail</span>
         </Link>
 
         <div className="flex flex-col items-center gap-1.5">
@@ -30,7 +32,7 @@ export function NotFound() {
           to="/"
           className="inline-flex h-9 items-center rounded-lg bg-primary px-4 font-mono text-[13px] font-semibold text-on-primary transition-opacity hover:opacity-90"
         >
-          Back to BetterBox
+          Back to KB OneMail
         </Link>
       </div>
     </main>

@@ -175,7 +175,7 @@ export function GithubIssuesPage({
     if (query.data && !query.data.linked) {
       return (
         <ConnectState
-          blurb="Link your GitHub account to BetterBox (no new account, just a sign-in) and the issues assigned to you, or that you opened, show up here."
+          blurb="Link your GitHub account to KB OneMail (no new account, just a sign-in) and the issues assigned to you, or that you opened, show up here."
           onConnect={linkGithub}
         />
       );

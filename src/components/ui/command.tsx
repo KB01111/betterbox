@@ -2,6 +2,7 @@ import type * as React from "react";
 import { Command as CommandPrimitive } from "cmdk";
 
 import { cn } from "@/lib/utils";
+import { platformShortcut } from "@/lib/auth/platform";
 import {
   Dialog,
   DialogContent,
@@ -167,6 +168,7 @@ function CommandItem({
 
 function CommandShortcut({
   className,
+  children,
   ...props
 }: React.ComponentProps<"span">) {
   return (
@@ -177,7 +179,9 @@ function CommandShortcut({
         className,
       )}
       {...props}
-    />
+    >
+      {typeof children === "string" ? platformShortcut(children) : children}
+    </span>
   );
 }
 

@@ -7,7 +7,7 @@ export const Route = createFileRoute("/_app/webhooks")({
       <div className="max-w-lg space-y-6">
         <p className="text-sm leading-relaxed text-muted-foreground">
           Webhooks will pipe incoming emails into any system that accepts an
-          HTTP POST. You'll define a filter, point it at a URL, and BetterBox
+          HTTP POST. You'll define a filter, point it at a URL, and KB OneMail
           will deliver a signed JSON payload the moment a matching message
           arrives, no polling required.
         </p>
@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_app/webhooks")({
           </span>
           <br />
           <span className="text-muted-foreground/60">
-            X-BetterBox-Signature:{" "}
+            X-KB OneMail-Signature:{" "}
           </span>
           <span className="text-muted-foreground">sha256=abc123...</span>
         </div>

@@ -1,4 +1,4 @@
-name: Deploy private BetterBox
+name: Deploy private KB OneMail
 on:
   workflow_dispatch:
 permissions:

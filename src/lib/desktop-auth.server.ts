@@ -18,7 +18,7 @@ export async function handleDesktopAuth(request: Request): Promise<Response> {
     if (!validDesktopSecret(body.challenge) || !DESKTOP_MODES.includes(body.mode as typeof DESKTOP_MODES[number])) fail(400, "Invalid desktop request.");
     const mode = String(body.mode);
     const session = await auth.api.getSession({ headers: request.headers });
-    if (mode !== "signin" && !session) fail(401, "Sign in to BetterBox first.");
+    if (mode !== "signin" && !session) fail(401, "Sign in to KB OneMail first.");
     const id = randomBytes(32).toString("base64url");
     await db.prepare("DELETE FROM desktop_auth WHERE expiresAt <= ?").bind(Date.now()).run();
     await db.prepare("INSERT INTO desktop_auth (id,challenge,mode,expectedUserId,expiresAt) VALUES (?,?,?,?,?)")
@@ -28,7 +28,7 @@ export async function handleDesktopAuth(request: Request): Promise<Response> {
   const id = request.method === "GET" ? url.searchParams.get("id") : body.id;
   if (!validDesktopSecret(id)) fail(400, "Invalid desktop request.");
   const ticket = await db.prepare("SELECT * FROM desktop_auth WHERE id = ? AND expiresAt > ?").bind(id, Date.now()).first<Ticket>();
-  if (!ticket) fail(410, "This desktop sign-in expired or was already used. Start again in BetterBox.");
+  if (!ticket) fail(410, "This desktop sign-in expired or was already used. Start again in KB OneMail.");
   if (action === "status" && request.method === "GET") {
     const session = await auth.api.getSession({ headers: request.headers });
     return json({ mode: ticket.mode, userCode: desktopUserCode(ticket.id), signedIn: !!session,
@@ -38,7 +38,7 @@ export async function handleDesktopAuth(request: Request): Promise<Response> {
   if (action === "approve" && request.method === "POST") {
     const session = await auth.api.getSession({ headers: request.headers });
     if (!session?.user.emailVerified || !isAllowedEmail(getRuntimeConfig(), session.user.email)) fail(401, "Sign in with an approved Google account first.");
-    if (ticket.expectedUserId && ticket.expectedUserId !== session.user.id) fail(403, "Use the same BetterBox user as the desktop app to link accounts.");
+    if (ticket.expectedUserId && ticket.expectedUserId !== session.user.id) fail(403, "Use the same KB OneMail user as the desktop app to link accounts.");
     const result = await db.prepare("UPDATE desktop_auth SET approvedUserId = ?, approvedSessionId = ? WHERE id = ? AND expiresAt > ? AND approvedUserId IS NULL")
       .bind(session.user.id, session.session.id, id, Date.now()).run();
     if (result.meta.changes !== 1) fail(410, "This request is already approved or expired.");

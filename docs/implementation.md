@@ -1,4 +1,4 @@
-# BetterBox production implementation checklist
+# KB OneMail production implementation checklist
 
 The supplied mission is the approved scope. Preserve React 19, TanStack Start,
 Query, Base UI/shadcn, theme tokens, account colors, and the custom split tree.

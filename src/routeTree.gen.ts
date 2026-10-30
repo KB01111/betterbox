@@ -34,6 +34,7 @@ import { Route as ApiGmailSignatureRouteImport } from './routes/api/gmail-signat
 import { Route as ApiImageProxyRouteImport } from './routes/api/image-proxy'
 import { Route as ApiLabelsRouteImport } from './routes/api/labels'
 import { Route as ApiMessageRouteImport } from './routes/api/message'
+import { Route as ApiNativeMailRouteImport } from './routes/api/native-mail'
 import { Route as ApiPullRequestsRouteImport } from './routes/api/pull-requests'
 import { Route as ApiSendRouteImport } from './routes/api/send'
 import { Route as ApiSignaturesRouteImport } from './routes/api/signatures'
@@ -167,6 +168,11 @@ const ApiMessageRoute = ApiMessageRouteImport.update({
   path: '/api/message',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiNativeMailRoute = ApiNativeMailRouteImport.update({
+  id: '/api/native-mail',
+  path: '/api/native-mail',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiPullRequestsRoute = ApiPullRequestsRouteImport.update({
   id: '/api/pull-requests',
   path: '/api/pull-requests',
@@ -233,6 +239,7 @@ export interface FileRoutesByFullPath {
   '/api/image-proxy': typeof ApiImageProxyRoute
   '/api/labels': typeof ApiLabelsRoute
   '/api/message': typeof ApiMessageRoute
+  '/api/native-mail': typeof ApiNativeMailRoute
   '/api/pull-requests': typeof ApiPullRequestsRoute
   '/api/send': typeof ApiSendRoute
   '/api/signatures': typeof ApiSignaturesRoute
@@ -266,6 +273,7 @@ export interface FileRoutesByTo {
   '/api/image-proxy': typeof ApiImageProxyRoute
   '/api/labels': typeof ApiLabelsRoute
   '/api/message': typeof ApiMessageRoute
+  '/api/native-mail': typeof ApiNativeMailRoute
   '/api/pull-requests': typeof ApiPullRequestsRoute
   '/api/send': typeof ApiSendRoute
   '/api/signatures': typeof ApiSignaturesRoute
@@ -302,6 +310,7 @@ export interface FileRoutesById {
   '/api/image-proxy': typeof ApiImageProxyRoute
   '/api/labels': typeof ApiLabelsRoute
   '/api/message': typeof ApiMessageRoute
+  '/api/native-mail': typeof ApiNativeMailRoute
   '/api/pull-requests': typeof ApiPullRequestsRoute
   '/api/send': typeof ApiSendRoute
   '/api/signatures': typeof ApiSignaturesRoute
@@ -339,6 +348,7 @@ export interface FileRouteTypes {
     | '/api/image-proxy'
     | '/api/labels'
     | '/api/message'
+    | '/api/native-mail'
     | '/api/pull-requests'
     | '/api/send'
     | '/api/signatures'
@@ -372,6 +382,7 @@ export interface FileRouteTypes {
     | '/api/image-proxy'
     | '/api/labels'
     | '/api/message'
+    | '/api/native-mail'
     | '/api/pull-requests'
     | '/api/send'
     | '/api/signatures'
@@ -407,6 +418,7 @@ export interface FileRouteTypes {
     | '/api/image-proxy'
     | '/api/labels'
     | '/api/message'
+    | '/api/native-mail'
     | '/api/pull-requests'
     | '/api/send'
     | '/api/signatures'
@@ -431,6 +443,7 @@ export interface RootRouteChildren {
   ApiImageProxyRoute: typeof ApiImageProxyRoute
   ApiLabelsRoute: typeof ApiLabelsRoute
   ApiMessageRoute: typeof ApiMessageRoute
+  ApiNativeMailRoute: typeof ApiNativeMailRoute
   ApiPullRequestsRoute: typeof ApiPullRequestsRoute
   ApiSendRoute: typeof ApiSendRoute
   ApiSignaturesRoute: typeof ApiSignaturesRoute
@@ -617,6 +630,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiMessageRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/native-mail': {
+      id: '/api/native-mail'
+      path: '/api/native-mail'
+      fullPath: '/api/native-mail'
+      preLoaderRoute: typeof ApiNativeMailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/pull-requests': {
       id: '/api/pull-requests'
       path: '/api/pull-requests'
@@ -725,6 +745,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiImageProxyRoute: ApiImageProxyRoute,
   ApiLabelsRoute: ApiLabelsRoute,
   ApiMessageRoute: ApiMessageRoute,
+  ApiNativeMailRoute: ApiNativeMailRoute,
   ApiPullRequestsRoute: ApiPullRequestsRoute,
   ApiSendRoute: ApiSendRoute,
   ApiSignaturesRoute: ApiSignaturesRoute,

@@ -1,22 +1,51 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "BetterBox",
-  "version": "0.2.1",
+  "productName": "KB OneMail",
+  "mainBinaryName": "kb-onemail",
+  "version": "0.3.0",
   "identifier": "dev.kevinjbridgelal.betterbox",
-  "build": {},
+  "build": {
+    "frontendDist": "../ui"
+  },
   "app": {
     "windows": [],
-    "security": { "capabilities": ["hosted-auth"] }
+    "security": {
+      "capabilities": ["hosted-auth"]
+    }
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": ["nsis"],
-    "shortDescription": "BetterBox email desktop client",
+    "shortDescription": "KB OneMail email desktop client",
     "category": "Productivity",
     "icon": ["icons/icon.ico"],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
-      "nsis": { "installMode": "currentUser", "displayLanguageSelector": false }
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false,
+        "installerHooks": "windows/hooks.nsh"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["kb-onemail"]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IERDNUMyQzFEOUQwOEY5M0UKUldRKytRaWRIU3hjM0pMamVtZUpSRy9HT3d3em0vMThNenBvdUZOaTU4cmZzczlCYTBZdEhzRU4K",
+      "endpoints": [
+        "https://github.com/KB01111/kb-onemail/releases/download/desktop-preview/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   }
 }

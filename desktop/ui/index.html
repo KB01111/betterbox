@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+  <meta charset="utf-8" /><meta
+    name="viewport"
+    content="width=device-width,initial-scale=1"
+  /><meta
+    http-equiv="Content-Security-Policy"
+    content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+  /><title>KB OneMail</title>
+  <style>
+    html {
+      font: 16px system-ui;
+      color: #e6eaf2;
+      background: #10141c;
+      color-scheme: dark;
+    }
+    body {
+      max-width: 32rem;
+      margin: 18vh auto;
+      padding: 2rem;
+    }
+    h1 {
+      font-size: 2rem;
+    }
+    p {
+      line-height: 1.6;
+      color: #b1bbce;
+    }
+    button {
+      font: inherit;
+      padding: 0.7rem 1.2rem;
+      background: #2563eb;
+      color: white;
+      border: 0;
+      border-radius: 0.5rem;
+      cursor: pointer;
+    }
+    button:focus-visible {
+      outline: 3px solid white;
+      outline-offset: 3px;
+    }
+    #error {
+      color: #fca5a5;
+    }
+  </style>
+  <h1>KB OneMail</h1>
+  <p
+    id="version"
+    style="
+      font:
+        12px ui-monospace,
+        monospace;
+    "
+  >
+    Windows personal preview
+  </p>
+  <p id="status">Connecting to your mailbox…</p>
+  <p id="error" role="status"></p>
+  <button type="button" id="retry">Try again</button>
+  <script>
+    const retry = document.getElementById("retry");
+    window.__TAURI_INTERNALS__
+      .invoke("desktop_action", { action: "state", payload: {} })
+      .then((state) => {
+        document.getElementById("version").textContent =
+          `Version ${state.version} · Windows personal preview`;
+      })
+      .catch(() => {});
+    async function connect() {
+      retry.disabled = true;
+      document.getElementById("error").textContent = "";
+      try {
+        await window.__TAURI_INTERNALS__.invoke("desktop_connect");
+      } catch (e) {
+        document.getElementById("error").textContent = String(e);
+        document.getElementById("status").textContent =
+          "Your mailbox is temporarily unavailable. Check your connection and try again.";
+      } finally {
+        retry.disabled = false;
+      }
+    }
+    retry.onclick = connect;
+    setTimeout(connect, 300);
+  </script>
+</html>

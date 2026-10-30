@@ -800,7 +800,7 @@ export async function markAccountRead(accessToken: string): Promise<number> {
   return total;
 }
 
-async function gmailFetch(accessToken: string, path: string, init?: RequestInit): Promise<Response> {
+export async function gmailFetch(accessToken: string, path: string, init?: RequestInit): Promise<Response> {
   const budget = budgets.getStore();
   const signal = budget?.signal ? AbortSignal.any([budget.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000);
   const attempts = !init?.method || init.method === "GET" ? 3 : 1;

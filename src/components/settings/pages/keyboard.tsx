@@ -1,10 +1,12 @@
 import { cn } from "@/lib/utils";
+import { desktopBridge } from "@/lib/auth/desktop-bridge";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { Page, PageSection, SoonTag } from "../primitives";
 
 const SHORTCUTS: { label: string; keys: string[]; soon?: boolean }[] = [
   { label: "Command palette", keys: ["⌘", "K"] },
   { label: "Compose", keys: ["C"] },
+  { label: "Send from composer", keys: ["⌘", "Enter"] },
   { label: "Go to inbox (all accounts)", keys: ["G", "I"] },
   { label: "Switch account 1–9", keys: ["⌥", "1–9"] },
   { label: "Toggle raw source", keys: ["⌥", "R"] },
@@ -38,6 +40,15 @@ export function KeyboardPage() {
           ))}
         </div>
       </PageSection>
+      {desktopBridge("settings") && (
+        <PageSection title="Desktop actions">
+          <p className="text-[13px] text-muted-foreground">
+            Open the command palette to find Desktop settings, Windows default
+            mail app, and Check for desktop updates. The tray menu also opens
+            your inbox and composer.
+          </p>
+        </PageSection>
+      )}
     </Page>
   );
 }

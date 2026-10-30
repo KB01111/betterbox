@@ -64,6 +64,18 @@ import {
 } from "@/hooks/use-snippets";
 import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
+import { Button } from "@/components/ui/button";
+import {
+  desktopAction,
+  desktopBridge,
+  desktopRequest,
+  DESKTOP_ACTION_EVENT,
+  DESKTOP_REFRESH_EVENT,
+  DESKTOP_QUIT_EVENT,
+  reportDesktopLifecycle,
+  type ComposeActivation,
+  canActivateDesktopCompose,
+} from "@/lib/auth/desktop-bridge";
 
 export const Route = createFileRoute("/_app")({
   ssr: false,
@@ -260,6 +272,27 @@ function AppShell() {
   }, []);
 
   const [composeOpen, setComposeOpen] = useState(false);
+  const [draftOpening, setDraftOpening] = useState(false);
+  const [pendingActivations, setPendingActivations] = useState<
+    ComposeActivation[]
+  >([]);
+  const pendingActivation = pendingActivations[0];
+  const [activationSaving, setActivationSaving] = useState(false);
+  const activateCompose = useCallback((payload: ComposeActivation) => {
+    if (!canActivateDesktopCompose(composerOpenGuard.current)) {
+      toast("Wait for the current draft to finish opening.");
+      return;
+    }
+    nativeState.current.composeOpen = true;
+    setComposeContent({
+      ...EMPTY_COMPOSE,
+      ...payload,
+      body: plainToHtml(payload.body ?? ""),
+    });
+    setDraftRef(null);
+    setComposeOpen(true);
+    setPendingActivations((queue) => queue.slice(1));
+  }, []);
   /* Composer fields live here (not in Composer) so they survive remounts:
      pane↔popout switches, or pages where the compose pane isn't mounted. */
   const [composeContent, setComposeContent] =
@@ -274,6 +307,64 @@ function AppShell() {
     accountId: string;
     emailId: string;
   } | null>(null);
+  const nativeState = useRef({ composeOpen, booting: true, pending: false });
+  nativeState.current = {
+    composeOpen,
+    pending: pendingActivations.length > 0,
+    booting:
+      isPending || allAccounts === null || composerOpenGuard.current.pending,
+  };
+  const nativeActions = useRef({ openSettings, openFolder, activateCompose });
+  nativeActions.current = { openSettings, openFolder, activateCompose };
+  useEffect(() => {
+    if (!desktopBridge("lifecycle")) return;
+    const handle = (event: Event) => {
+      const action = desktopAction((event as CustomEvent).detail);
+      if (!action) return;
+      if (action.kind === "compose") {
+        if (
+          nativeState.current.composeOpen ||
+          nativeState.current.booting ||
+          nativeState.current.pending ||
+          composerOpenGuard.current.pending
+        )
+          setPendingActivations((queue) => [...queue, action.payload]);
+        else nativeActions.current.activateCompose(action.payload);
+      } else if (action.kind === "settings")
+        nativeActions.current.openSettings("desktop");
+      else if (action.kind === "inbox")
+        void nativeActions.current.openFolder("inbox");
+      else if (action.kind === "refresh")
+        window.dispatchEvent(new Event(DESKTOP_REFRESH_EVENT));
+      else if (action.kind === "quit-request") {
+        if (nativeState.current.composeOpen)
+          window.dispatchEvent(
+            new CustomEvent(DESKTOP_QUIT_EVENT, {
+              detail: { requestId: action.requestId },
+            }),
+          );
+        else
+          void desktopRequest("quit-response", {
+            requestId: action.requestId,
+            allow:
+              !nativeState.current.booting &&
+              !composerOpenGuard.current.pending,
+          }).catch(() => {});
+      }
+    };
+    window.addEventListener(DESKTOP_ACTION_EVENT, handle);
+    // The native side keeps activations queued until this acknowledgement.
+    reportDesktopLifecycle(true, false);
+    void desktopRequest("ready", {}).catch(() => {});
+    return () => window.removeEventListener(DESKTOP_ACTION_EVENT, handle);
+  }, []);
+  useEffect(() => {
+    if (!composeOpen)
+      reportDesktopLifecycle(
+        isPending || allAccounts === null || draftOpening,
+        false,
+      );
+  }, [composeOpen, isPending, allAccounts, draftOpening]);
   useEffect(() => {
     if (previousUser.current !== signedInUserId) {
       composerOpenGuard.current.cancel();
@@ -308,6 +399,8 @@ function AppShell() {
       }
       const ticket = composerOpenGuard.current.begin(signedInUserId);
       if (!ticket) return;
+      setDraftOpening(true);
+      reportDesktopLifecycle(true, false);
       const loadingToast = toast.loading("Opening draft…");
       try {
         const full = await fetchFullEmail(accountId, emailId);
@@ -342,6 +435,7 @@ function AppShell() {
         });
       } finally {
         composerOpenGuard.current.finish(ticket);
+        setDraftOpening(false);
         toast.dismiss(loadingToast);
       }
     },
@@ -446,7 +540,7 @@ function AppShell() {
 
   // `booting` covers session fetch + first accounts load: render the shell with
   // skeleton account/user blocks so the sidebar never shows up late.
-  const booting = isPending || allAccounts === null;
+  const booting = isPending || allAccounts === null || draftOpening;
 
   if (!session) {
     // The cached loader guard won't re-trigger on client-side sign-out, so
@@ -508,16 +602,63 @@ function AppShell() {
         loading={booting}
       />
       <SidebarInset className="h-svh min-w-0">
+        {pendingActivation && (
+          <div
+            role="status"
+            className="flex items-center gap-3 border-b bg-muted p-3 text-sm"
+          >
+            <span>
+              {pendingActivations.length} new{" "}
+              {pendingActivations.length === 1 ? "message is" : "messages are"}{" "}
+              waiting to open.
+            </span>
+            <Button
+              size="sm"
+              disabled={booting || activationSaving}
+              onClick={() => {
+                if (!composeOpen) {
+                  activateCompose(pendingActivation);
+                  return;
+                }
+                setActivationSaving(true);
+                window.dispatchEvent(
+                  new CustomEvent("kb-onemail:save-before-compose", {
+                    detail: {
+                      done: (saved: boolean) => {
+                        setActivationSaving(false);
+                        if (saved) activateCompose(pendingActivation);
+                        else
+                          toast.error(
+                            "Save the current draft before opening the waiting message.",
+                          );
+                      },
+                    },
+                  }),
+                );
+              }}
+            >
+              {composeOpen ? "Save draft and open message" : "Open message"}
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={activationSaving}
+              onClick={() => setPendingActivations((queue) => queue.slice(1))}
+            >
+              Dismiss
+            </Button>
+          </div>
+        )}
         {/* Mobile chrome: hamburger (sidebar sheet) + search + compose.
             Hidden on md+, where the persistent sidebar is shown. */}
         <header className="flex h-[calc(3rem+env(safe-area-inset-top))] shrink-0 items-center gap-1 border-b px-2 pt-[env(safe-area-inset-top)] md:hidden">
           <SidebarTrigger className="size-9" />
           <div className="flex items-center gap-2 pl-1">
-            <span className="flex size-5.5 items-center justify-center rounded-md bg-primary text-on-primary">
+            <span className="flex size-5.5 items-center justify-center rounded-md bg-[#2563EB] text-white">
               <MailIcon className="size-3.5" />
             </span>
             <span className="font-mono text-[13px] font-semibold">
-              BetterBox
+              KB OneMail
             </span>
           </div>
           <button
@@ -608,7 +749,7 @@ function LoadingScreen({
       }`}
     >
       <div className="flex flex-col items-center gap-3">
-        <span className="inline-flex size-11 animate-pulse items-center justify-center rounded-[10px] bg-primary text-on-primary">
+        <span className="inline-flex size-11 animate-pulse items-center justify-center rounded-[10px] bg-[#2563EB] text-white">
           <MailIcon className="size-6" />
         </span>
         <span className="font-mono text-[11px] tracking-wide text-ink-tertiary">

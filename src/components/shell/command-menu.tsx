@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 
 import { toast } from "sonner";
+import { desktopBridge, desktopRequest } from "@/lib/auth/desktop-bridge";
 import type { Account } from "@/lib/account";
 import { AccountDot } from "@/components/shell/account-dot";
 import { linkGoogle, signOut } from "@/lib/auth/auth-client";
@@ -348,6 +349,37 @@ export function CommandMenu({
     {
       heading: "Settings",
       entries: [
+        ...(desktopBridge("settings")
+          ? [
+              {
+                label: "Desktop settings",
+                icon: <Laptop />,
+                action: () => onOpenSettings("desktop"),
+              },
+              {
+                label: "Windows default mail app",
+                icon: <MailOpen />,
+                action: () => {
+                  void desktopRequest("default-apps", {}).catch((e: Error) =>
+                    toast.error(e.message),
+                  );
+                },
+              },
+            ]
+          : []),
+        ...(desktopBridge("updates")
+          ? [
+              {
+                label: "Check for desktop updates",
+                icon: <RotateCcw />,
+                action: () => {
+                  void desktopRequest("check-updates", {})
+                    .then(() => onOpenSettings("desktop"))
+                    .catch((e: Error) => toast.error(e.message));
+                },
+              },
+            ]
+          : []),
         {
           label: "Open settings",
           icon: <Settings />,

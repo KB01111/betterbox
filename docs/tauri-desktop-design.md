@@ -1,15 +1,15 @@
-# BetterBox Tauri v2 desktop release
+# KB OneMail Tauri v2 desktop release
 
 ## Scope
 
 Replace the proposed Edge launcher installer with a Windows Tauri v2 application
-and publish its installer in KB01111/betterbox GitHub Releases. Keep the existing
+and publish its installer in KB01111/kb-onemail GitHub Releases. Keep the existing
 Cloudflare Workers/D1 backend and hosted mailbox interface.
 
 ## Recommended design
 
-- Tauri v2 uses Windows WebView2 to show the existing BetterBox deployment.
-- Restrict application navigation to the exact BetterBox HTTPS origin. Open
+- Tauri v2 uses Windows WebView2 to show the existing KB OneMail deployment.
+- Restrict application navigation to the exact KB OneMail HTTPS origin. Open
   ordinary external links in the system browser. Do not grant arbitrary remote
   pages native filesystem, shell, or credential access.
 - Google sign-in and account linking run in the system browser, not the embedded

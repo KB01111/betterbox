@@ -1,6 +1,6 @@
-# Contributing to BetterBox
+# Contributing to KB OneMail
 
-Thanks for your interest in improving BetterBox. Issues and pull requests are welcome.
+Thanks for your interest in improving KB OneMail. Issues and pull requests are welcome.
 
 ## Getting set up
 

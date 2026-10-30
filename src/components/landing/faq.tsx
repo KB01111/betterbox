@@ -2,7 +2,7 @@ import { Wrap } from "./primitives";
 
 const FAQ_ITEMS = [
   {
-    q: "What is BetterBox exactly?",
+    q: "What is KB OneMail exactly?",
     a: "A client for the Gmail accounts you already have, built on the Gmail API. Nothing migrates, your mail stays in Google. It started as a Gmail client and is expanding into a workspace: email, pull requests, and issues in one tab. GitHub is connected now. Linear is next.",
   },
   {
@@ -15,11 +15,11 @@ const FAQ_ITEMS = [
   },
   {
     q: "Why does Google show a security warning when I sign in?",
-    a: "BetterBox is a hobby project and Google's verification costs ~$750/yr. I can't justify that right now, so you'll see an 'unverified app' warning when you sign in. Click Advanced, then Proceed to BetterBox to continue. You can read the privacy policy or self-host if you'd prefer.",
+    a: "Google has not yet approved this deployment's OAuth application. KB OneMail requests restricted Gmail permissions for its mail features. Public verification requires Google's review and, because mail passes through a server, a security assessment. Hosting the app for free does not remove these requirements. Review the privacy policy and wait for verification if you do not want to authorize an unverified app.",
   },
   {
-    q: "Does BetterBox store my mail?",
-    a: "Messages are fetched live from the Gmail API when you open the app and are never stored on our servers. The only data we store is your account tokens, session records, and settings.",
+    q: "Does KB OneMail store my mail?",
+    a: "Messages are fetched live through the server and kept in memory, without a local mailbox database. Authentication records, encrypted OAuth tokens, account metadata, and snippets and signatures you create are stored. Gmail holds saved drafts. Windows notifications can retain sender and subject; Desktop settings offer private alerts and notifications-off. The privacy policy explains retention and your controls.",
   },
   {
     q: "When does hosted launch?",
