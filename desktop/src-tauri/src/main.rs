@@ -23,7 +23,7 @@ use tokio::{
 
 const INIT_SCRIPT: &str = r#"
 if (window === window.top && window.location.origin === 'https://betterbox.kevinjbridgelal.workers.dev') {
-  const bridge = Object.freeze({version:1,capabilities:Object.freeze(['auth','lifecycle','settings','updates','mail','appearance']),authenticate:(mode)=>window.__TAURI_INTERNALS__.invoke('desktop_auth',{mode}),request:(action,payload={})=>{if(action==='quit-response'&&payload.allow===true)document.documentElement.inert=true;return window.__TAURI_INTERNALS__.invoke('desktop_action',{action,payload});}});
+  const bridge = Object.freeze({version:1,capabilities:Object.freeze(['auth','lifecycle','settings','updates','mail','appearance']),authenticate:(mode)=>window.__TAURI_INTERNALS__.invoke('desktop_auth',{mode}),request:(action,payload={})=>{const approved=action==='quit-response'&&payload.allow===true;if(approved)document.documentElement.inert=true;const result=window.__TAURI_INTERNALS__.invoke('desktop_action',{action,payload});return approved?result.catch(error=>{document.documentElement.inert=false;throw error;}):result;}});
   Object.defineProperty(window, '__KB_ONEMAIL_DESKTOP__', {value:bridge,writable:false,configurable:false});
   Object.defineProperty(window, '__BETTERBOX_DESKTOP__', {
     value: Object.freeze({ authenticate: bridge.authenticate }),

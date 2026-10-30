@@ -91,6 +91,14 @@ mod tests {
         assert!(state.approve("current", true));
         assert!(state.pending.is_none());
     }
+    #[test]
+    fn unready_lifecycle_still_requests_renderer_approval() {
+        let mut state = Lifecycle::default();
+        assert!(state.begin_quit("current".into()));
+        assert!(!state.begin_quit("another".into()));
+        assert!(!state.approve("old", true));
+        assert!(state.approve("current", true));
+    }
 }
 use serde_json::{json, Value};
 use url::Url;
@@ -236,6 +244,13 @@ impl Default for Lifecycle {
 impl Lifecycle {
     pub fn safe(&self) -> bool {
         self.ready && !self.busy && !self.dirty
+    }
+    pub fn begin_quit(&mut self, id: String) -> bool {
+        if self.pending.is_some() {
+            return false;
+        }
+        self.pending = Some(id);
+        true
     }
     pub fn approve(&mut self, id: &str, allow: bool) -> bool {
         if self.pending.as_deref() != Some(id) {

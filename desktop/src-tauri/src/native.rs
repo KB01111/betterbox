@@ -481,10 +481,9 @@ async fn approve_quit(app: &AppHandle) -> bool {
     {
         let state = app.state::<NativeState>();
         let mut lifecycle = state.lifecycle.lock().unwrap();
-        if lifecycle.pending.is_some() || !lifecycle.ready {
+        if !lifecycle.begin_quit(id.clone()) {
             return false;
         }
-        lifecycle.pending = Some(id.clone());
         state.closing.store(true, Ordering::SeqCst);
         *state.quit_reply.lock().unwrap() = Some(tx);
     }

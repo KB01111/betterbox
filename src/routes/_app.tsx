@@ -538,8 +538,7 @@ function AppShell() {
     return () => document.removeEventListener("keydown", down);
   }, [accountIds, only, toggle, openCompose, openFolder]);
 
-  // `booting` covers session fetch + first accounts load: render the shell with
-  // skeleton account/user blocks so the sidebar never shows up late.
+  // Pending activations also wait until a draft has finished opening.
   const booting = isPending || allAccounts === null || draftOpening;
 
   if (!session) {
@@ -599,7 +598,7 @@ function AppShell() {
         onTogglePanel={togglePanel}
         openPanels={openPanels}
         onAddTestAccount={onAddTestAccount}
-        loading={booting}
+        loading={isPending || allAccounts === null}
       />
       <SidebarInset className="h-svh min-w-0">
         {pendingActivation && (

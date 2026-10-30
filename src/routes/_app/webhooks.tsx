@@ -33,7 +33,7 @@ export const Route = createFileRoute("/_app/webhooks")({
           </span>
           <br />
           <span className="text-muted-foreground/60">
-            X-KB OneMail-Signature:{" "}
+            X-KB-OneMail-Signature:{" "}
           </span>
           <span className="text-muted-foreground">sha256=abc123...</span>
         </div>
