@@ -1,6 +1,7 @@
 export function authorizationErrorMessage(code: string | undefined): string | null {
   if (!code) return null;
   const messages: Record<string,string> = {
+    desktop_auth_failed: "Desktop connection failed or expired. Start again and approve the matching code in your browser.",
     access_denied: "Google authorization was cancelled. Choose an allowed account and grant Gmail access to continue.",
     invalid_grant: "Google access has expired or been revoked. Reconnect the account and grant access again.",
     redirect_uri_mismatch: "The Google OAuth callback does not match this deployment. Ask the instance owner to update the Web client redirect URI.",

@@ -39,6 +39,7 @@ import { Route as ApiSendRouteImport } from './routes/api/send'
 import { Route as ApiSignaturesRouteImport } from './routes/api/signatures'
 import { Route as ApiSnippetsRouteImport } from './routes/api/snippets'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
+import { Route as DesktopConnectRouteImport } from './routes/desktop.connect'
 import { Route as AppEmailIdRouteImport } from './routes/_app/email.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -191,6 +192,11 @@ const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
   path: '/api/waitlist',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DesktopConnectRoute = DesktopConnectRouteImport.update({
+  id: '/desktop/connect',
+  path: '/desktop/connect',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AppEmailIdRoute = AppEmailIdRouteImport.update({
   id: '/email/$id',
   path: '/email/$id',
@@ -232,6 +238,7 @@ export interface FileRoutesByFullPath {
   '/api/signatures': typeof ApiSignaturesRoute
   '/api/snippets': typeof ApiSnippetsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/desktop/connect': typeof DesktopConnectRoute
   '/email/$id': typeof AppEmailIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -264,6 +271,7 @@ export interface FileRoutesByTo {
   '/api/signatures': typeof ApiSignaturesRoute
   '/api/snippets': typeof ApiSnippetsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/desktop/connect': typeof DesktopConnectRoute
   '/': typeof AppIndexRoute
   '/email/$id': typeof AppEmailIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -299,6 +307,7 @@ export interface FileRoutesById {
   '/api/signatures': typeof ApiSignaturesRoute
   '/api/snippets': typeof ApiSnippetsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
+  '/desktop/connect': typeof DesktopConnectRoute
   '/_app/': typeof AppIndexRoute
   '/_app/email/$id': typeof AppEmailIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
@@ -335,6 +344,7 @@ export interface FileRouteTypes {
     | '/api/signatures'
     | '/api/snippets'
     | '/api/waitlist'
+    | '/desktop/connect'
     | '/email/$id'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
@@ -367,6 +377,7 @@ export interface FileRouteTypes {
     | '/api/signatures'
     | '/api/snippets'
     | '/api/waitlist'
+    | '/desktop/connect'
     | '/'
     | '/email/$id'
     | '/api/auth/$'
@@ -401,6 +412,7 @@ export interface FileRouteTypes {
     | '/api/signatures'
     | '/api/snippets'
     | '/api/waitlist'
+    | '/desktop/connect'
     | '/_app/'
     | '/_app/email/$id'
     | '/api/auth/$'
@@ -424,6 +436,7 @@ export interface RootRouteChildren {
   ApiSignaturesRoute: typeof ApiSignaturesRoute
   ApiSnippetsRoute: typeof ApiSnippetsRoute
   ApiWaitlistRoute: typeof ApiWaitlistRoute
+  DesktopConnectRoute: typeof DesktopConnectRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -639,6 +652,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiWaitlistRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/desktop/connect': {
+      id: '/desktop/connect'
+      path: '/desktop/connect'
+      fullPath: '/desktop/connect'
+      preLoaderRoute: typeof DesktopConnectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_app/email/$id': {
       id: '/_app/email/$id'
       path: '/email/$id'
@@ -710,6 +730,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSignaturesRoute: ApiSignaturesRoute,
   ApiSnippetsRoute: ApiSnippetsRoute,
   ApiWaitlistRoute: ApiWaitlistRoute,
+  DesktopConnectRoute: DesktopConnectRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport

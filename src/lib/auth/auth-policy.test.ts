@@ -18,6 +18,14 @@ describe("Google OAuth admission applies before signup, sign-in and linking", ()
     expect(()=>google.mapProfileToUser(profile("outsider@example.test"))).toThrow();
     expect(()=>google.mapProfileToUser(profile("one@example.test",false))).toThrow();
   });
+  test("Gmail admission still requires a verified provider identity", () => {
+    const gmailAuth = createAuth({} as PrismaClient, { ...config, allowedEmails: new Set(["*@gmail.com"]) });
+    const gmail = gmailAuth.options.socialProviders.google;
+    expect(gmail.mapProfileToUser(profile("new.user@gmail.com"))).toEqual({});
+    expect(() => gmail.mapProfileToUser(profile("new.user@gmail.com", false))).toThrow();
+    expect(() => gmail.mapProfileToUser(profile("user@gmail.com.attacker.test"))).toThrow();
+    expect(() => gmail.mapProfileToUser(profile("user@example.com"))).toThrow();
+  });
   test("never retains an ID token after provider account writes", async () => {
     google.mapProfileToUser(profile("two@example.test"));
     const account = {id:"record",accountId:"stable-sub",providerId:"google",userId:"owner",idToken:"private-id-token",createdAt:new Date(),updatedAt:new Date()};

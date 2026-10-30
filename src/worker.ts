@@ -4,6 +4,7 @@ import { guardApiRequest, secureResponse } from "@/lib/request-security";
 import { json } from "@/lib/json-response";
 import { withGmailBudget } from "@/lib/gmail/api.server";
 import { apiErrorResponse } from "@/lib/api-error";
+import { handleDesktopAuth } from "@/lib/desktop-auth.server";
 
 export default {
   async fetch(request: Request, bindings: RuntimeBindings): Promise<Response> {
@@ -23,7 +24,7 @@ export default {
             }
           }
         }
-        const response = secureResponse(await start.fetch(request));
+        const response = secureResponse(url.pathname.startsWith("/api/desktop/") ? await handleDesktopAuth(request) : await start.fetch(request));
         if (response.headers.get("content-type")?.includes("text/html") && !response.headers.has("content-security-policy")) {
           response.headers.set("content-security-policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self'; frame-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'");
         }

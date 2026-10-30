@@ -4,6 +4,13 @@ A private unified Gmail web application, hosted on Cloudflare Workers and D1.
 Use a normal HTTPS URL in Chrome or another browser; no desktop installation,
 Docker, paid database or always-running server is required for hosted use.
 
+The Windows Tauri v2 client uses this same hosted backend. Its installer is
+published on [our fork's Releases page](https://github.com/KB01111/betterbox/releases).
+Google authorization opens in your system browser. Compare the displayed code
+before approving the desktop connection; return to the app when approved.
+Mail still requires a network connection and is not stored in the desktop profile.
+See [the desktop design](docs/tauri-desktop-design.md) for the security boundary.
+
 This is the [KB01111/betterbox](https://github.com/KB01111/betterbox) fork of
 [Aidan McAlister's BetterBox](https://github.com/aidankmcalister/betterbox), under
 the existing MIT license.
@@ -19,7 +26,8 @@ the existing MIT license.
 - Rich composer, To/Cc/Bcc, sender selection, replies/forwarding, snippets,
   signatures and Gmail drafts. Send uses the selected account's saved draft.
 - Google account chooser and explicit account linking; exact-address access
-  list applies to signup, sign-in, existing sessions and linked Gmail identities.
+  list (or explicit `*@gmail.com` admission) applies to signup, sign-in,
+  existing sessions and linked Gmail identities.
 - Light/dark themes, responsive reading pane, command palette and keyboard use.
 - Optional GitHub panels. Linear/webhooks/developer API remain visibly **Soon**.
 

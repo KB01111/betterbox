@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "betterbox",
+  "account_id": "6ce14db19e722769ce97f9a987066f4b",
   "main": "src/worker.ts",
   "compatibility_date": "2026-10-29",
   // Better Auth/Start use async_hooks and crypto; Gmail MIME uses Buffer.
@@ -11,7 +12,7 @@
     {
       "binding": "DB",
       "database_name": "betterbox",
-      // Add the real database_id returned by `wrangler d1 create betterbox`.
+      "database_id": "e97b4f71-24b6-43e2-ac68-f8811df7da52",
       "migrations_dir": "migrations"
     }
   ],

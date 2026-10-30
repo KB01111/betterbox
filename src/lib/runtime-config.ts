@@ -24,7 +24,7 @@ export function parseRuntimeConfig(values: Record<string, unknown>): RuntimeConf
   if (url.username || url.password || url.pathname !== "/" || url.search || url.hash) throw new ConfigurationError("BETTER_AUTH_URL must be an origin");
   if (url.protocol !== "https:" && !(local && url.protocol === "http:")) throw new ConfigurationError("BETTER_AUTH_URL must use HTTPS outside localhost");
   const allowedEmails = new Set(requireValue("ALLOWED_EMAILS").split(",").map((email) => email.trim().toLowerCase()).filter(Boolean));
-  if (!allowedEmails.size || [...allowedEmails].some((email) => !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw new ConfigurationError("ALLOWED_EMAILS must list exact email addresses");
+  if (!allowedEmails.size || [...allowedEmails].some((email) => email !== "*@gmail.com" && !/^[^\s@*]+@[^\s@*]+\.[^\s@*]+$/.test(email))) throw new ConfigurationError("ALLOWED_EMAILS must list exact email addresses or *@gmail.com");
   const githubId = read("GITHUB_CLIENT_ID");
   const githubSecret = read("GITHUB_CLIENT_SECRET");
   if (Boolean(githubId) !== Boolean(githubSecret)) throw new ConfigurationError("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET must be configured together");
@@ -36,5 +36,6 @@ export function parseRuntimeConfig(values: Record<string, unknown>): RuntimeConf
 }
 
 export function isAllowedEmail(config: Pick<RuntimeConfig, "allowedEmails">, email: string): boolean {
-  return config.allowedEmails.has(email.trim().toLowerCase());
+  const normalized = email.trim().toLowerCase();
+  return config.allowedEmails.has(normalized) || (config.allowedEmails.has("*@gmail.com") && /^[^\s@*]+@gmail\.com$/.test(normalized));
 }

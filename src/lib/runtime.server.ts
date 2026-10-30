@@ -23,6 +23,10 @@ export function getRuntimeConfig(): RuntimeConfig {
   return current.config;
 }
 
+export function getRuntimeBindings(): RuntimeBindings {
+  return currentRuntime().bindings;
+}
+
 export function hasAuthConfiguration(): boolean {
   try { getRuntimeConfig(); return true; } catch { return false; }
 }

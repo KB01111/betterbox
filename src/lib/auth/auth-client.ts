@@ -3,6 +3,7 @@ import { inferAdditionalFields } from "better-auth/client/plugins";
 import type { auth } from "./auth";
 import { toast } from "sonner";
 import { authorizationErrorMessage } from "./auth-errors";
+import { desktopAuthenticate } from "./desktop-client";
 
 // inferAdditionalFields mirrors the server's user.additionalFields (e.g. `role`)
 // onto the typed client — `import type` keeps server code out of the bundle.
@@ -10,13 +11,15 @@ export const authClient = createAuthClient({
   plugins: [inferAdditionalFields<typeof auth>()],
 });
 
-export const signIn = () => authClient.signIn.social({ provider: "google", callbackURL: "/", errorCallbackURL: "/sign-in" });
+export const signIn = () => desktopAuthenticate("signin") ?? authClient.signIn.social({ provider: "google", callbackURL: "/", errorCallbackURL: "/sign-in" });
 export const signInWithGithub = () =>
-  authClient.signIn.social({ provider: "github" });
+  desktopAuthenticate("github") ?? authClient.signIn.social({ provider: "github" });
 
 // Attach another Gmail account to the signed-in user.
 export const linkGoogle = async (gmailSettings = false) => {
   try {
+  const desktop = desktopAuthenticate(gmailSettings ? "google-settings" : "google");
+  if (desktop) return await desktop;
   const result = await authClient.linkSocial({
     provider: "google",
     scopes: [
@@ -36,6 +39,8 @@ export const linkGoogle = async (gmailSettings = false) => {
 // `read:user` resolves the viewer. Returns to the PRs page after the OAuth hop.
 export const linkGithub = async () => {
   try {
+  const desktop = desktopAuthenticate("github");
+  if (desktop) return await desktop;
   const result = await authClient.linkSocial({
     provider: "github",
     scopes: ["read:user", "repo"],

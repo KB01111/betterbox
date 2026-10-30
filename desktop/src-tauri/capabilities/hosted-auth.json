@@ -1,0 +1,10 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "hosted-auth",
+  "description": "Only the hosted BetterBox main window can request a browser authentication handoff.",
+  "local": false,
+  "windows": ["main"],
+  "platforms": ["windows"],
+  "remote": { "urls": ["https://betterbox.kevinjbridgelal.workers.dev/*"] },
+  "permissions": ["allow-desktop-auth"]
+}

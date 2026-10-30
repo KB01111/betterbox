@@ -21,6 +21,19 @@ describe("private runtime configuration", () => {
     expect(() => parseRuntimeConfig({ ...valid, ALLOWED_EMAILS: "" })).toThrow("ALLOWED_EMAILS");
     expect(() => parseRuntimeConfig({ ...valid, BETTER_AUTH_SECRET: "short" })).toThrow("BETTER_AUTH_SECRET");
   });
+  test("explicit Gmail admission accepts Gmail only and preserves exact entries", () => {
+    const config = parseRuntimeConfig({ ...valid, ALLOWED_EMAILS: "*@gmail.com,one@example.com" });
+    expect(isAllowedEmail(config, " New.User+mail@GMAIL.com ")).toBe(true);
+    expect(isAllowedEmail(config, "one@example.com")).toBe(true);
+    for (const email of ["other@example.com", "user@gmail.com.attacker.test", "user@sub.gmail.com", "@gmail.com", "user@@gmail.com", "user name@gmail.com"]) {
+      expect(isAllowedEmail(config, email)).toBe(false);
+    }
+  });
+  test("rejects unrestricted and other domain wildcards", () => {
+    for (const value of ["*", "*@example.com", "user*@gmail.com", "*@gmail.com.attacker.test"]) {
+      expect(() => parseRuntimeConfig({ ...valid, ALLOWED_EMAILS: value })).toThrow("ALLOWED_EMAILS");
+    }
+  });
   test("requires HTTPS outside loopback development", () => {
     expect(() => parseRuntimeConfig({ ...valid, BETTER_AUTH_URL: "http://public.example" })).toThrow("HTTPS");
     expect(parseRuntimeConfig({ ...valid, BETTER_AUTH_URL: "http://localhost:3000" }).baseURL).toBe("http://localhost:3000");

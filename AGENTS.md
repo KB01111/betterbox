@@ -30,6 +30,9 @@ decisions already made.
   signatures (explicitly approved), verified linked-account email metadata, and a
   `role` enum on `User` (`USER|OWNER`, via Better Auth `additionalFields` with
   `input:false` so a client can never self-assign).
+  The `desktop_auth` table contains only expiring, single-use authentication
+  handoff metadata for the approved Tauri desktop client; it contains no mail
+  or OAuth tokens. Better Auth creates the separate desktop sessions.
   OAuth tokens on `Account` are encrypted at rest (`account.encryptOAuthTokens`,
   key = `BETTER_AUTH_SECRET`). Better Auth owns auth-table writes; direct
   maintenance scripts use bounded D1 SQL. Gmail data is fetched live and
@@ -89,8 +92,10 @@ decisions already made.
   request-local bindings/Prisma and a Gmail subrequest budget. Better Auth uses
   the SQLite adapter with transactions disabled. Read secrets only through
   validated runtime config; authenticated app routes are client-rendered.
-- **Private admission is deny by default.** `ALLOWED_EMAILS` covers every user
-  and linked Google identity. Google `accountId` is the stable provider subject;
+- **Admission is deny by default.** `ALLOWED_EMAILS` covers every user
+  and linked Google identity. The explicit `*@gmail.com` option permits all
+  verified Gmail identities, as requested by the deployment owner; other domains
+  require exact addresses. Google `accountId` is the stable provider subject;
   Better Auth 1.7 token/unlink APIs require the owned database `recordId`.
   Never return tokens to the browser or skip explicit ownership checks.
 - **Unified mailbox is the default.** `use-unified-mail.ts` maintains per-account

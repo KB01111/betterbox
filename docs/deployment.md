@@ -96,7 +96,11 @@ is a comma-separated list of exact addresses for **every** application user and
 linked Gmail identity. Empty/invalid lists deny access. Existing sessions and
 returning logins are rechecked; removing a primary address revokes app access.
 Removing a linked address blocks token access to that mailbox. There are no
-wildcard/domain shortcuts.
+general wildcard/domain shortcuts. To allow every verified `@gmail.com` identity,
+set `ALLOWED_EMAILS=*@gmail.com`. This admits other Gmail users to their own
+separate workspaces; ownership checks still isolate their mail and settings.
+Other domains still require exact entries. Google's test-user restrictions and
+production verification requirements continue to apply.
 
 `bun run encrypt-tokens` loads the local `.dev.vars` file. For a remote backfill,
 explicitly provide the original production `BETTER_AUTH_SECRET` in the process
