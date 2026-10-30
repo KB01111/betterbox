@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore } from "react";
+import { migrateAccent } from "./accent-migration";
 import type { Density } from "@/components/mail/thread-row";
 
 export type AccentId =
@@ -48,7 +49,7 @@ const DEFAULT_SETTINGS: Settings = {
   density: "compact",
   showPreview: true,
   previewFont: "sans",
-  accent: "orange",
+  accent: "blue",
   accountColors: {},
   tagColors: {},
   rawByDefault: false,
@@ -75,7 +76,10 @@ export const MARK_READ_MS: Record<MarkRead, number | null> = {
 function load(): Settings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SETTINGS;
+    if (!raw) {
+      localStorage.setItem("bm.accent-v2", "1");
+      return DEFAULT_SETTINGS;
+    }
     const parsed = JSON.parse(raw) as Partial<Settings> & {
       showSnippets?: boolean;
       snippetFont?: PreviewFont;
@@ -90,6 +94,12 @@ function load(): Settings {
     }
     delete parsed.showSnippets;
     delete parsed.snippetFont;
+    parsed.accent = migrateAccent(
+      parsed.accent,
+      localStorage.getItem("bm.accent-v2") === "1",
+    );
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(parsed));
+    localStorage.setItem("bm.accent-v2", "1");
     return { ...DEFAULT_SETTINGS, ...parsed };
   } catch {
     return DEFAULT_SETTINGS;
@@ -158,7 +168,7 @@ export const ACCENTS: Record<
     hover: "#ff885f",
     focus: "#db5a2e",
   },
-  blue: { label: "Blue", base: "#4ea7fc", hover: "#7cbdfd", focus: "#2e8de4" },
+  blue: { label: "Blue", base: "#2563EB", hover: "#1D4ED8", focus: "#1E40AF" },
   teal: { label: "Teal", base: "#1fb8a6", hover: "#38d6c2", focus: "#169486" },
   purple: {
     label: "Purple",
@@ -180,31 +190,35 @@ export const ACCENTS: Record<
   },
 };
 
-const ACCENT_VARS = [
-  "--primary",
-  "--primary-hover",
-  "--primary-focus",
-  "--ring",
-  "--sidebar-primary",
-  "--sidebar-ring",
-] as const;
-
 export function useApplyAccent() {
   const { accent } = useSettings();
   useEffect(() => {
     const style = document.documentElement.style;
-    if (accent === "orange") {
-      ACCENT_VARS.forEach((name) => {
+    if (accent === "blue") {
+      for (const name of [
+        "--primary",
+        "--primary-hover",
+        "--primary-focus",
+        "--primary-foreground",
+        "--on-primary",
+        "--ring",
+        "--sidebar-primary",
+        "--sidebar-primary-foreground",
+        "--sidebar-ring",
+      ])
         style.removeProperty(name);
-      });
       return;
     }
     const { base, hover, focus } = ACCENTS[accent];
+    const foreground = "#171717";
     style.setProperty("--primary", base);
     style.setProperty("--primary-hover", hover);
     style.setProperty("--primary-focus", focus);
-    style.setProperty("--ring", focus);
+    style.setProperty("--primary-foreground", foreground);
+    style.setProperty("--on-primary", foreground);
+    style.setProperty("--ring", base);
     style.setProperty("--sidebar-primary", base);
-    style.setProperty("--sidebar-ring", focus);
+    style.setProperty("--sidebar-primary-foreground", foreground);
+    style.setProperty("--sidebar-ring", base);
   }, [accent]);
 }

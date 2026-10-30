@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { ScriptOnce } from "@tanstack/react-router";
+import { desktopBridge, desktopRequest } from "@/lib/auth/desktop-bridge";
 
 type Theme = "dark" | "light" | "system";
 
@@ -39,6 +40,14 @@ function applyTheme(theme: Theme) {
 
   root.classList.add(resolved);
   root.style.colorScheme = resolved;
+  if (desktopBridge("appearance")) {
+    const transparency =
+      !window.matchMedia("(forced-colors: active)").matches &&
+      !window.matchMedia("(prefers-reduced-transparency: reduce)").matches;
+    void desktopRequest("appearance", { theme: resolved, transparency }).catch(
+      () => {},
+    );
+  }
 }
 
 export function ThemeProvider({
@@ -62,6 +71,19 @@ export function ThemeProvider({
   useEffect(() => {
     if (!mounted) return;
     applyTheme(theme);
+  }, [theme, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    const media = [
+      window.matchMedia("(forced-colors: active)"),
+      window.matchMedia("(prefers-reduced-transparency: reduce)"),
+    ];
+    const update = () => applyTheme(theme);
+    for (const query of media) query.addEventListener("change", update);
+    return () => {
+      for (const query of media) query.removeEventListener("change", update);
+    };
   }, [theme, mounted]);
 
   useEffect(() => {

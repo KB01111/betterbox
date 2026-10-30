@@ -244,7 +244,7 @@ export function PullRequestsPage({
     if (query.data && !query.data.linked) {
       return (
         <ConnectState
-          blurb="Link your GitHub account to BetterBox (no new account, just a sign-in) and your open pull requests show up here — authored and review-requested, with status, CI, and diff size."
+          blurb="Link your GitHub account to KB OneMail (no new account, just a sign-in) and your open pull requests show up here — authored and review-requested, with status, CI, and diff size."
           onConnect={linkGithub}
         />
       );

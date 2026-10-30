@@ -1,4 +1,4 @@
-# Deploy a private BetterBox on Cloudflare
+# Deploy a private KB OneMail on Cloudflare
 
 Use the Workers **Free** plan and D1. No paid plan, custom domain, VM, Redis,
 container, AI API or commercial monitoring service is needed. These instructions
@@ -61,7 +61,7 @@ your production deployment.
 Testing is limited to 100 registered users; Gmail test grants/refresh tokens
 normally expire after seven days. Reconnect when Google expires or revokes a
 grant. Google also limits live refresh tokens per account/client. There is no
-BetterBox account-count cap, but these provider limits still apply.
+KB OneMail account-count cap, but these provider limits still apply.
 See [audience/testing rules](https://support.google.com/cloud/answer/15549945)
 and [Google OAuth token rules](https://developers.google.com/identity/protocols/oauth2).
 
@@ -129,16 +129,16 @@ updates the deployed secret; redeploying does not put it into browser assets.
 Open the HTTPS URL in Chrome. Continue with Google, select an allowed account,
 and review/approve the requested Gmail permissions. All Inboxes is the default.
 Use **Add Gmail account** for second/third accounts; choose a different account
-in Google's chooser. They link to the current BetterBox user using Google's
+in Google's chooser. They link to the current KB OneMail user using Google's
 stable subject identity. Reconnecting an identity updates it rather than adding
-a duplicate. An identity already owned by a different BetterBox user cannot be
+a duplicate. An identity already owned by a different KB OneMail user cannot be
 silently transferred.
 
 Use account filters to select one, several or all; Board restores the original
 split-tree workspace. Settings → Accounts controls colors, sending defaults,
 reconnect/disconnect and optional signature permissions. Better Auth prevents
 unlinking the final sign-in method. Revoking Google permission and disconnecting
-from BetterBox are separate actions.
+from KB OneMail are separate actions.
 
 To enable owner-only demo/test tools after your first successful sign-in:
 
@@ -212,9 +212,9 @@ unneeded Pub/Sub, assessment or other billable services.
 | `access_denied`                                            | Confirm the address is a Google test user and is in ALLOWED_EMAILS; review requested consent and Workspace admin policy.    |
 | `email_not_allowed`                                        | Add that primary/linked address to ALLOWED_EMAILS, then restart the OAuth flow.                                             |
 | `invalid_grant`, revoked permission, missing refresh token | Reconnect from the browser chooser and grant offline consent. Test grants normally expire in seven days.                    |
-| Account already linked to another user                     | Sign in to that BetterBox user, disconnect there, then add it to the intended user. Never edit ownership to bypass consent. |
+| Account already linked to another user                     | Sign in to that KB OneMail user, disconnect there, then add it to the intended user. Never edit ownership to bypass consent. |
 | One account unavailable                                    | Other mail remains visible. Retry that account; for permissions/refresh errors reconnect.                                   |
-| No native Gmail signature                                  | Import requires incremental settings permission; local BetterBox signatures still work.                                     |
+| No native Gmail signature                                  | Import requires incremental settings permission; local KB OneMail signatures still work.                                     |
 | Remote images absent                                       | Default privacy policy. Opt in per message; administrator must also trust the exact host.                                   |
 | D1 table missing                                           | Apply local or remote migrations to the same binding used by the running environment.                                       |
 | Wrong encryption key                                       | Restore the original BETTER_AUTH_SECRET; never run a backfill to overwrite undecryptable ciphertext.                        |

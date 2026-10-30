@@ -1,83 +1,81 @@
-# BetterBox for Windows
+# KB OneMail for Windows
 
-This Tauri v2 client opens the existing BetterBox deployment at
-`https://betterbox.kevinjbridgelal.workers.dev`. The Workers/D1 application remains
-the only backend. An internet connection is required. The desktop client adds no
-mailbox database, offline mailbox buffer, or embedded OAuth credentials.
+KB OneMail 0.3.0 is a Tauri v2 Windows 11 personal preview. The existing
+https://betterbox.kevinjbridgelal.workers.dev deployment remains the only backend.
+The application/profile identifier stays dev.kevinjbridgelal.betterbox so sessions,
+layouts and preferences survive the product rename.
 
-## Build
+## Desktop behavior
 
-Use Windows 10/11 x64, Visual Studio C++ Build Tools and Windows SDK, Rust 1.95.0,
-and Bun 1.3.14. From this directory:
+- Native Windows caption buttons, system menu, Snap Layouts and window restoration.
+- Translucent Mica sidebar/chrome, theme-matched title bar, and solid mail surfaces.
+  Turn translucency off in Desktop settings. Windows transparency, high contrast,
+  reduced transparency and battery saver take precedence. Unsupported systems
+  use an opaque window; no web blur or animation loop is used.
+- One instance per Windows user; closing hides to the tray. Use its Quit command
+  to exit. Compose, Settings, Open and Check mail are available from the tray.
+- Native background checks every five minutes. History cursors and deduplication
+  exist only in memory. Hidden WebView rendering suspends when drafts/actions
+  are safe; Rust continues checking mail.
+- Windows notifications optionally show sender and subject. Windows notification
+  history is the explicitly approved persistence exception. Private alerts and
+  notifications-off remain available; no local mailbox/body/draft database exists.
+- Mailto is advertised in Windows Default apps; the user chooses the handler.
+  Links populate an editable composer and never send automatically. Existing
+  compositions and pending draft loads are protected.
+- Optional launch at Windows sign-in starts in the tray; disabled by default.
+- Quit, reload and update installation require a successful draft-save handshake.
+  Failed/busy saves keep the app open. Browser OAuth retains the verifier-bound,
+  expiring, single-use approval-code handoff.
 
-```powershell
-bun install --frozen-lockfile
-bun run check
-bun run test
-bun run build
-```
+## Build and verification
 
-The installer is emitted beneath
-`src-tauri/target/release/bundle/nsis/`. It installs for the current user, creates
-a Start menu entry and uninstaller, and downloads the Microsoft WebView2
-bootstrapper if the runtime is missing. Installer setup therefore needs internet
-access. The installer is **unsigned**; Windows may show a publisher/SmartScreen
-warning. No signing identity or automatic update channel is configured.
+Use the pinned Bun/Rust versions in package.json and Cargo.toml and install the
+Windows C++ Build Tools, Windows SDK and Microsoft WebView2 runtime.
 
-The application icon is rendered directly from the existing `public/favicon.svg`
-branding using the pinned Tauri CLI. To regenerate only Windows assets:
+    bun install --frozen-lockfile
+    bun run check
+    bun run test
+    bun run build
 
-```powershell
-bunx tauri icon ../public/favicon.svg --output src-tauri/icons
-```
+Release packaging requires TAURI_SIGNING_PRIVATE_KEY and
+TAURI_SIGNING_PRIVATE_KEY_PASSWORD. Keep private material outside source control.
+The public verification key in updater.pub must match plugins.updater.pubkey.
+The release workflow uses encrypted repository secrets and checks this identity.
 
-Keep `icon.ico`, `icon.png`, and `32x32.png` for the Windows build; the command
-also produces icons for other platforms which are not used here.
+The resulting NSIS installer, updater signature and checksum go under
+src-tauri/target/release/bundle/nsis (or CARGO_TARGET_DIR when overridden).
+This is a per-user installation. Missing WebView2 uses Microsoft's bootstrapper
+and requires internet. The installer is **unsigned by a Windows publisher**;
+Windows may show a publisher/SmartScreen warning. Update signing is separate.
 
-## Native security boundary
+## Upgrade and distribution
 
-The only remote native command is `desktop_auth(mode)`, with the four supported
-modes `signin`, `google`, `google-settings`, and `github`. An initialization script
-publishes `window.__BETTERBOX_DESKTOP__.authenticate(mode)` only in the trusted
-top-level document. No filesystem, shell, opener, credential, or general window
-commands are granted to the remote page. Application command permissions are
-generated explicitly in `build.rs` and granted only to the exact hosted HTTPS
-origin and main window.
+The installer migrates a verified BetterBox 0.2.1 default installation in place.
+It checks the exact old per-user path and executable version, preserves the
+identifier-based profile, and removes only matching old records and shortcuts.
+Other/custom legacy installations are left alone.
 
-The native client generates a random 32-byte verifier and sends its SHA-256
-base64url challenge to `/api/desktop/start`. Linking requests include the native
-WebView's hosted cookies. The returned browser URL must have the exact trusted
-origin, `/desktop/connect` path, and matching ticket ID. The native window shows
-the approval code, and the system browser handles login, provider consent and
-explicit approval. Native polling is limited to five minutes. Redeemed session
-cookies are validated, installed as Secure, HttpOnly, SameSite=Lax cookies for
-the exact hosted hostname, and never returned to JavaScript or placed in URLs.
+The Windows release workflow builds and signs immutable versioned installer
+assets. Publishing is an explicit manual dispatch with compatible backend and
+installer acceptance recorded. The preview channel manifest is uploaded last.
+Updates verify installer signatures, ask before installation, and protect drafts.
+A failed or missing update channel keeps the current installed application.
 
-Off-origin top-level navigation is cancelled; safe HTTP/HTTPS links open in the
-system browser. New windows also open in the system browser. This policy uses
-WebView2's top-level navigation event, so it does not intercept the sandboxed mail
-iframe's own navigation or change its CSP/image policy. Google is never opened
-inside an embedded provider window. Attachment downloads use a native Save As
-dialog and only write the path explicitly chosen there; the remote page receives
-no file API. Downloads are restricted to the hosted origin or blobs owned by it.
+Before releasing, deploy compatible hosted support and record installed Windows
+acceptance against the exact installer SHA-256. See ../docs/windows-hardening.md.
+Live OAuth, notification-center activation, sleep/resume, accessibility, multiple
+monitors/DPI and performance targets need actual platform evidence; passing
+unit tests or a build does not qualify them.
 
-WebView2 keeps the application's session and ordinary browser profile state in
-the per-user application profile. This is not an offline mailbox feature; the
-desktop shell does not write message content to its own storage.
+## Resource measurements
 
-## Reproducible packaging
+From the repository root, the measurement script records only the selected app
+process and descendants, without mail, URLs, command lines or screenshots.
 
-`.github/workflows/desktop-release.yml` runs on manual dispatch and `desktop-v*`
-tags. It checks the committed Rust and Bun lockfiles, runs native tests, builds
-the per-user NSIS installer, calculates SHA-256, and uploads both as workflow
-artifacts. It does not create or publish a GitHub Release. Publish the installer
-and checksum only after checking the matching workflow head and acceptance
-results.
+    pwsh -NoProfile -File scripts/measure-desktop.ps1 -SelfTest
+    pwsh -NoProfile -File scripts/measure-desktop.ps1 -ProcessId <PID> -DurationSeconds 900 -OutputPath <absolute-json-path>
 
-## Acceptance boundaries
-
-Rust tests cover exact-origin decisions, handoff URL matching, verifier/challenge
-generation, supported modes and cookie validation. A passing build does not prove
-live OAuth consent, signed distribution, installation, attachment saving, or
-accessibility. Record those results against the exact installer hash before
-claiming them. Provider consent must be completed by the account owner.
+Keep unrelated heavy work stopped for acceptance measurements. The JSON/CSV
+records normalized CPU, private memory, working set and sample duration. It does
+not establish startup/interaction latency or a 1,000-row navigation soak by itself.

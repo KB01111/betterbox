@@ -1,17 +1,19 @@
-# BetterBox
+# KB OneMail
 
 A private unified Gmail web application, hosted on Cloudflare Workers and D1.
 Use a normal HTTPS URL in Chrome or another browser; no desktop installation,
 Docker, paid database or always-running server is required for hosted use.
 
 The Windows Tauri v2 client uses this same hosted backend. Its installer is
-published on [our fork's Releases page](https://github.com/KB01111/betterbox/releases).
+published on [our fork's Releases page](https://github.com/KB01111/kb-onemail/releases).
 Google authorization opens in your system browser. Compare the displayed code
 before approving the desktop connection; return to the app when approved.
 Mail still requires a network connection and is not stored in the desktop profile.
+Windows notifications can include sender and subject in Windows notification
+history; disable previews or notifications in Desktop settings for private alerts.
 See [the desktop design](docs/tauri-desktop-design.md) for the security boundary.
 
-This is the [KB01111/betterbox](https://github.com/KB01111/betterbox) fork of
+This is the [KB01111/kb-onemail](https://github.com/KB01111/kb-onemail) fork of
 [Aidan McAlister's BetterBox](https://github.com/aidankmcalister/betterbox), under
 the existing MIT license.
 
@@ -33,6 +35,8 @@ the existing MIT license.
 
 Messages and attachments stay in Google and pass through the Worker on demand.
 They are held in browser memory, never saved in D1 or a service-worker cache.
+The approved Windows notification-history exception contains only sender and
+subject; the app adds no local mailbox, body, attachment, or draft persistence.
 D1 stores authentication, encrypted credentials, account metadata and existing
 user-created snippets/signatures. There are no analytics SDKs in this fork.
 

@@ -15,7 +15,7 @@ export function Header() {
           href={GITHUB_URL}
           target="_blank"
           rel="noopener noreferrer"
-          aria-label="BetterBox on GitHub"
+          aria-label="KB OneMail on GitHub"
           className="ml-auto inline-flex size-9 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-card hover:text-foreground sm:ml-0"
         >
           <GithubMark className="size-[18px]" />

@@ -1,4 +1,6 @@
-export type DesktopAuthMode = "signin" | "google" | "google-settings" | "github";
+import { desktopAuthenticationBlocked, desktopBridge } from "./desktop-bridge";
+export type DesktopAuthMode =
+  "signin" | "google" | "google-settings" | "github";
 
 export function desktopConnectSearch(search: Record<string, unknown>) {
   return {
@@ -10,14 +12,32 @@ export function desktopConnectSearch(search: Record<string, unknown>) {
 
 declare global {
   interface Window {
-    __BETTERBOX_DESKTOP__?: { authenticate: (mode: DesktopAuthMode) => Promise<unknown> };
+    __BETTERBOX_DESKTOP__?: {
+      authenticate: (mode: DesktopAuthMode) => Promise<unknown>;
+    };
   }
 }
 
 export function desktopAuthenticate(mode: DesktopAuthMode) {
-  const desktop = typeof window !== "undefined" ? window.__BETTERBOX_DESKTOP__ : undefined;
+  const desktop =
+    desktopBridge("auth") ??
+    (typeof window !== "undefined" ? window.__BETTERBOX_DESKTOP__ : undefined);
   if (!desktop) return undefined;
-  return desktop.authenticate(mode).then(() => ({ error: null })).catch(() => ({
-    error: { code: "desktop_auth_failed", message: "Desktop connection failed or expired. Try again." },
-  }));
+  if (desktopAuthenticationBlocked())
+    return Promise.resolve({
+      error: {
+        code: "desktop_busy",
+        message:
+          "Save or discard your open draft and finish the current action before connecting an account.",
+      },
+    });
+  return desktop
+    .authenticate(mode)
+    .then(() => ({ error: null }))
+    .catch(() => ({
+      error: {
+        code: "desktop_auth_failed",
+        message: "Desktop connection failed or expired. Try again.",
+      },
+    }));
 }

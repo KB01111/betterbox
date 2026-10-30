@@ -21,12 +21,12 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1, viewport-fit=cover",
       },
       {
-        title: "BetterBox",
+        title: "KB OneMail",
       },
       {
         name: "description",
         content:
-          "BetterBox: a faster, denser client for your Google inboxes, built on the Gmail API.",
+          "KB OneMail: a faster, denser client for your Google inboxes, built on the Gmail API.",
       },
       {
         name: "google-site-verification",

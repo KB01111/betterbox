@@ -1,8 +1,9 @@
 import type * as React from "react";
 
 import { cn } from "@/lib/utils";
+import { platformShortcut } from "@/lib/auth/platform";
 
-function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
+function Kbd({ className, children, ...props }: React.ComponentProps<"kbd">) {
   return (
     <kbd
       data-slot="kbd"
@@ -11,7 +12,9 @@ function Kbd({ className, ...props }: React.ComponentProps<"kbd">) {
         className,
       )}
       {...props}
-    />
+    >
+      {typeof children === "string" ? platformShortcut(children) : children}
+    </kbd>
   );
 }
 

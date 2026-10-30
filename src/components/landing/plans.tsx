@@ -38,7 +38,7 @@ export function Plans() {
             </span>
             <p className="mt-4 max-w-xs text-sm leading-relaxed text-pretty text-muted-foreground">
               Everything works out of the box. No setup, no OAuth app, no
-              database. Just BetterBox.
+              database. Just KB OneMail.
             </p>
             <div className="mt-6 w-full">
               <Waitlist big source="plan" />

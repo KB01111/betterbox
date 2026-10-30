@@ -16,7 +16,7 @@ export function Wordmark({ small }: { small?: boolean }) {
     <span className="inline-flex items-center gap-2">
       <span
         className={cn(
-          "inline-flex flex-none items-center justify-center rounded-md bg-primary text-primary-foreground",
+          "inline-flex flex-none items-center justify-center rounded-md bg-[#2563EB] text-white",
           small ? "size-5" : "size-6",
         )}
       >
@@ -28,7 +28,7 @@ export function Wordmark({ small }: { small?: boolean }) {
           small ? "text-xs" : "text-sm",
         )}
       >
-        BetterBox
+        KB OneMail
       </span>
     </span>
   );

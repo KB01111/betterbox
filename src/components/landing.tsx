@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from "react";
 
 import { cn } from "@/lib/utils";
+import { usePublicDesktopLifecycle } from "@/hooks/use-public-desktop";
 
 import { AccessErrorBanner } from "./landing/access-error-banner";
 import { Demo } from "./landing/demo";
@@ -32,10 +33,11 @@ function useSystemTheme(): "dark" | "light" {
   return theme;
 }
 
-/** Signed-out landing page — the "BetterBox Landing v6" marketing layout, on the
+/** Signed-out landing page — the "KB OneMail Landing v6" marketing layout, on the
  *  app's standard shadcn tokens and type scale. Follows the OS color scheme,
  *  independent of the in-app theme. Only bespoke flourish: the animated pulse dot. */
 export function LandingPage() {
+  usePublicDesktopLifecycle();
   const theme = useSystemTheme();
 
   // Mirror the system theme onto <html> while mounted. Overlays portal to <body>

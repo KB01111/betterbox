@@ -140,7 +140,7 @@ function DisconnectAccountButton({ account }: { account: Account }) {
           <p className="text-sm text-muted-foreground">
             Disconnect{" "}
             <span className="font-mono text-foreground">{label}</span> from
-            BetterBox. Its inbox, labels, and sending stop showing up here.
+            KB OneMail. Its inbox, labels, and sending stop showing up here.
             Nothing in Gmail changes, and you can reconnect it anytime.
           </p>
           <DialogFooter>
@@ -240,7 +240,7 @@ export function AccountsPage({ accounts }: { accounts: Account[] }) {
       <PageSection title="Native Gmail signatures">
         <SettingRow
           label="Import Gmail signature"
-          description="Optional: grant basic Gmail settings access to the account you choose. Existing BetterBox signatures need no extra permission."
+          description="Optional: grant basic Gmail settings access to the account you choose. Existing KB OneMail signatures need no extra permission."
         >
           <Button variant="outline" size="sm" onClick={() => linkGoogle(true)}>
             Grant signature access

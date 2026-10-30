@@ -1,10 +1,10 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "hosted-auth",
-  "description": "Only the hosted BetterBox main window can request a browser authentication handoff.",
-  "local": false,
+  "description": "Restricted KB OneMail main-window authentication and lifecycle commands.",
+  "local": true,
   "windows": ["main"],
   "platforms": ["windows"],
   "remote": { "urls": ["https://betterbox.kevinjbridgelal.workers.dev/*"] },
-  "permissions": ["allow-desktop-auth"]
+  "permissions": ["allow-desktop-auth", "allow-desktop-action", "allow-desktop-connect"]
 }

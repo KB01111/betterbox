@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance for AI agents working on BetterBox. The README covers what the
+Guidance for AI agents working on KB OneMail. The README covers what the
 product is; this file covers how to work on it without re-learning the
 decisions already made.
 
@@ -25,7 +25,12 @@ decisions already made.
 
 ## Hard rules
 
-- **Never persist mailbox content.** D1 contains Better Auth tables
+- **Never persist mailbox content in application storage.** The sole approved
+  exception is sender and subject in Windows notification history, explicitly
+  requested by the deployment owner on 2026-10-30. Desktop settings offer private
+  alerts and notifications-off. This does not authorize a local mailbox, message
+  bodies, attachment storage, draft buffers, or persisted history cursors.
+  D1 contains Better Auth tables
   (`User`, `Session`, `Account`, `Verification`), user-created snippets and
   signatures (explicitly approved), verified linked-account email metadata, and a
   `role` enum on `User` (`USER|OWNER`, via Better Auth `additionalFields` with
@@ -36,7 +41,7 @@ decisions already made.
   OAuth tokens on `Account` are encrypted at rest (`account.encryptOAuthTokens`,
   key = `BETTER_AUTH_SECRET`). Better Auth owns auth-table writes; direct
   maintenance scripts use bounded D1 SQL. Gmail data is fetched live and
-  never persisted — subjects, senders, message snippets, bodies and attachments
+  never persisted by the application — subjects, senders, message snippets, bodies and attachments
   exist only in HTTP responses and in-memory state. Draft autosaves go to Gmail;
   no IndexedDB mail buffer is used. Adding persistence of message data is a deliberate
   product decision the user must make, not a refactor.
@@ -73,8 +78,10 @@ decisions already made.
   Dark mode maps the shadcn semantic vars onto this palette in `styles.css`;
   prefer semantic tokens (`bg-card`, `text-muted-foreground`) in components so
   light mode keeps working.
-- **Orange `#f46a3c` is THE chrome accent in both themes** (user-overridable
-  via the accent setting, applied as inline CSS vars on `<html>`).
+- **Blue is the KB OneMail chrome accent** (user-overridable via the accent
+  setting, applied as inline CSS vars on `<html>`). The fixed logo is `#2563eb`
+  with a white envelope. The light interface uses `#2563eb`/white; dark interface
+  blue uses `#60a5fa` with dark foreground for contrast. Preserve chosen accents.
   **Teal (`accent-2`) is dev-only**: terminal/code/⌘K affordances, DEV chips.
 - **Fonts — Roboto for anything a human wrote or a label we wrote; JetBrains
   Mono for anything a machine produced.** If you'd copy-paste it into a
@@ -132,9 +139,12 @@ decisions already made.
 
 ## Keyboard
 
-`⌘K` palette · `G` then `I` inbox/all accounts · `⌥1–9` switch account
-(`⌘1–9` is browser-reserved — don't try). Global handlers live in
+Windows: **Ctrl+K** palette · **Alt+1–9** switch account · **Alt+R** raw MIME ·
+**Ctrl+Enter** send from composer. On macOS, use Command for Ctrl and Option for
+Alt. Render shortcut labels through the shared Kbd/CommandShortcut components;
+do not hardcode Mac symbols in visible Windows labels. `G` then `I` opens
+inbox/all accounts (`Ctrl/Command+1–9` is browser-reserved). Global handlers live in
 `_app.tsx`; reader handlers (`Esc`, `R`) live in `inbox-tiles.tsx`. Raw MIME
-toggles via the reader toolbar **Raw** button or **`⌥R`** (handled in
+toggles via the reader toolbar **Raw** button or **Alt/Option+R** (handled in
 `inbox-tiles.tsx`). New global actions belong in both the palette and
 Settings → Keyboard.

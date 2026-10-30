@@ -1,21 +1,24 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { TriangleAlertIcon } from "lucide-react";
+import { MailIcon, TriangleAlertIcon } from "lucide-react";
 
 import { signIn } from "@/lib/auth/auth-client";
 import { fetchGoogleConfigured } from "@/lib/auth/auth-session";
 import { GITHUB_URL } from "@/components/integrations/github-mark";
 import { authorizationErrorMessage } from "@/lib/auth/auth-errors";
+import { usePublicDesktopLifecycle } from "@/hooks/use-public-desktop";
 
 /**
- * Sign-in page — implements the "BetterBox Sign In (standalone)" design handoff:
- * a centered card with the BetterBox lockup, an "unverified app" warning, and a
+ * Sign-in page — implements the "KB OneMail Sign In (standalone)" design handoff:
+ * a centered card with the KB OneMail lockup, an "unverified app" warning, and a
  * Continue-with-Google button. Google is the only identity provider (the app is
  * built on the Gmail API, so a Google account is the login).
  */
 export const Route = createFileRoute("/sign-in")({
-  validateSearch: (search: Record<string, unknown>): { error?: string } => ({ error: typeof search.error === "string" ? search.error : undefined }),
-  head: () => ({ meta: [{ title: "Sign in — BetterBox" }] }),
+  validateSearch: (search: Record<string, unknown>): { error?: string } => ({
+    error: typeof search.error === "string" ? search.error : undefined,
+  }),
+  head: () => ({ meta: [{ title: "Sign in — KB OneMail" }] }),
   // Resolve Google config on the server so a fresh self-host instance shows
   // setup guidance instead of a Continue button that 500s mid-flow.
   loader: async () => ({ googleConfigured: await fetchGoogleConfigured() }),
@@ -48,6 +51,7 @@ function GoogleG() {
 }
 
 function SignIn() {
+  usePublicDesktopLifecycle();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { googleConfigured } = Route.useLoaderData();
@@ -58,9 +62,14 @@ function SignIn() {
     setLoading(true);
     try {
       const result = await signIn();
-      if (result.error) { setError(authorizationErrorMessage(result.error.code)); setLoading(false); }
+      if (result.error) {
+        setError(authorizationErrorMessage(result.error.code));
+        setLoading(false);
+      }
     } catch {
-      setError("Google could not be reached. Check your connection and try again.");
+      setError(
+        "Google could not be reached. Check your connection and try again.",
+      );
       setLoading(false);
     }
   };
@@ -71,12 +80,12 @@ function SignIn() {
         <span className="inline-flex items-center gap-2.5">
           <span
             aria-hidden="true"
-            className="flex size-[30px] flex-none items-center justify-center rounded-[8px] bg-primary text-[18px] font-bold tracking-[-1px] text-on-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
+            className="flex size-[30px] flex-none items-center justify-center rounded-[8px] bg-[#2563EB] text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
           >
-            B
+            <MailIcon className="size-[18px]" />
           </span>
           <span className="text-[20px] font-semibold tracking-[-0.6px] text-ink">
-            BetterBox
+            KB OneMail
           </span>
         </span>
 
@@ -106,14 +115,15 @@ function SignIn() {
                   Private, authorized access
                 </p>
                 <p className="text-[12px] leading-[1.6] text-[color-mix(in_srgb,var(--color-label-red)_82%,#ffffff)]">
-                  Use an address approved by this instance's owner and registered
-                  with the Google OAuth project. Google may display a test-app
-                  warning. Grant access only if you trust this deployment.
+                  Use an address approved by this instance's owner and
+                  registered with the Google OAuth project. Google may display a
+                  test-app warning. Grant access only if you trust this
+                  deployment.
                 </p>
                 <p className="text-[12px] leading-[1.6] text-[color-mix(in_srgb,var(--color-label-red)_82%,#ffffff)]">
-                  BetterBox requests permission to read, search, send and organize
-                  your Gmail. Your messages stay in Google and pass through this
-                  instance when you use the app. Read the{" "}
+                  KB OneMail requests permission to read, search, send and
+                  organize your Gmail. Your messages stay in Google and pass
+                  through this instance when you use the app. Read the{" "}
                   <a
                     href="/privacy"
                     className="text-label-red underline decoration-1 underline-offset-2 hover:decoration-2"
@@ -155,8 +165,7 @@ function SignIn() {
             <p className="text-[12px] leading-[1.6] text-ink-subtle">
               Ask the instance owner to configure Google credentials, a strong
               auth secret, the canonical URL and an explicit allowed-email list.
-              Local development uses
-              your{" "}
+              Local development uses your{" "}
               <code className="rounded bg-surface-1 px-1 py-0.5 font-mono text-[11px]">
                 .dev.vars
               </code>{" "}
@@ -185,7 +194,10 @@ function SignIn() {
         )}
 
         {(error || callback) && (
-          <p role="alert" className="mt-3 text-[12px] leading-normal text-label-red">
+          <p
+            role="alert"
+            className="mt-3 text-[12px] leading-normal text-label-red"
+          >
             {error || callback}
           </p>
         )}

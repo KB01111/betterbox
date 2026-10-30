@@ -45,7 +45,7 @@ export function Demo() {
           isYouTube(DEMO_VIDEO_URL) ? (
             <iframe
               src={youTubeEmbedUrl(DEMO_VIDEO_URL)}
-              title="BetterBox walkthrough"
+              title="KB OneMail walkthrough"
               className="aspect-video w-full rounded-lg"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
               allowFullScreen
