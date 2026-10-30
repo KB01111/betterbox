@@ -33,7 +33,7 @@ export function desktopManifest(input: ReleaseInput): {
     platforms: {
       "windows-x86_64": {
         signature,
-        url: `https://github.com/KB01111/kb-onemail/releases/download/${tag}/${encodeURIComponent(filename)}`,
+        url: `https://github.com/KB01111/kb-onemail/releases/download/${tag}/${encodeURIComponent(filename.replaceAll(" ", "."))}`,
       },
     },
   };
