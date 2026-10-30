@@ -58,6 +58,7 @@ export const Route = createFileRoute("/api/message")({
               url.searchParams.get("mime") ?? "",
               url.searchParams.get("download") === "1",
               url.searchParams.get("filename") ?? "attachment",
+              url.searchParams.get("view") === "1",
             );
           }
           if (!id) return json({ error: "id is required" }, 400);

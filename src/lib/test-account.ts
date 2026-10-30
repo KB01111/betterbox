@@ -15,6 +15,37 @@ const testReadIds = new Set<string>();
 const testReadAccounts = new Set<string>();
 const testEmailLabels = new Map<string, Set<string>>(); // `acct::emailId` -> labelIds
 const seededLabelAccounts = new Set<string>();
+const accountLabels = new Map<string, { id: string; name: string }[]>();
+
+export function getTestLabels(accountId: string) {
+  if (!accountLabels.has(accountId))
+    accountLabels.set(accountId, [
+      { id: "Label_vip", name: "VIP" },
+      { id: "Label_receipts", name: "Receipts" },
+      { id: "Label_followup", name: "Follow up" },
+    ]);
+  return accountLabels.get(accountId)?.map((label) => ({ ...label })) ?? [];
+}
+
+export function createTestLabel(accountId: string, name: string) {
+  const labels = getTestLabels(accountId);
+  const label = { id: `Label_${crypto.randomUUID()}`, name };
+  accountLabels.set(accountId, [...labels, label]);
+  return label;
+}
+
+export function renameTestLabel(
+  accountId: string,
+  labelId: string,
+  name: string,
+) {
+  accountLabels.set(
+    accountId,
+    getTestLabels(accountId).map((label) =>
+      label.id === labelId ? { ...label, name } : label,
+    ),
+  );
+}
 
 const labelKey = (accountId: string, emailId: string) =>
   `${accountId}::${emailId}`;
@@ -53,6 +84,11 @@ export function setTestEmailLabel(
 }
 
 export function removeTestLabel(accountId: string, labelId: string): void {
+  seedTestLabels(accountId);
+  accountLabels.set(
+    accountId,
+    getTestLabels(accountId).filter((label) => label.id !== labelId),
+  );
   for (const [key, set] of testEmailLabels) {
     if (key.startsWith(`${accountId}::`)) set.delete(labelId);
   }

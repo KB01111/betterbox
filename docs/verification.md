@@ -3,6 +3,9 @@
 October 30, 2026. Validation covers the implementation on
 `codex/production-unified-gmail`. No deployment or live mail send was performed.
 
+This is the initial implementation record. See [the PR review follow-up](pr-review-followup.md)
+for subsequent fixes and the latest local verification counts.
+
 ## Delivered behavior
 
 Unified Inbox is the default with global Gmail search, per-account filters,

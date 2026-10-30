@@ -16,6 +16,7 @@ export const Route = createFileRoute("/api/image-proxy")({
   server: {
     handlers: {
       GET: async ({ request }: { request: Request }) => {
+        // Reader srcdoc preserves same-origin cookies via allow-same-origin; keep this endpoint private.
         const session = await auth.api.getSession({ headers: request.headers });
         if (!session) return json({ error: "Not signed in" }, 401);
         const hosts = getRuntimeConfig().imageProxyHosts;

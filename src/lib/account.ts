@@ -1,3 +1,15 @@
+import { isTestAccount } from "./test-account";
+
+export function canDisconnectGoogleAccount(
+  accounts: Account[],
+  accountId: string,
+): boolean {
+  return (
+    !isTestAccount(accountId) &&
+    accounts.filter((account) => !isTestAccount(account.accountId)).length > 1
+  );
+}
+
 /** A connected Gmail account as returned by GET /api/accounts. */
 export type Account = {
   accountId: string;

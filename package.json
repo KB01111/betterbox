@@ -23,7 +23,7 @@
     "cf:preview": "wrangler dev --config dist/server/wrangler.json --port 8787",
     "deploy": "bun run build && wrangler deploy",
     "set-owner": "bun scripts/set-owner.ts",
-    "encrypt-tokens": "bun scripts/encrypt-oauth-tokens.ts",
+    "encrypt-tokens": "bun --env-file=.dev.vars scripts/encrypt-oauth-tokens.ts",
     "test:runtime": "node --import tsx scripts/test-runtime.ts",
     "postinstall": "prisma generate"
   },

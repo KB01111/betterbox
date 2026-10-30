@@ -18,6 +18,9 @@ import {
   markTestAccountRead,
   markTestEmailsRead,
   removeTestLabel,
+  getTestLabels,
+  createTestLabel,
+  renameTestLabel,
   setTestEmailLabel,
   testLabelEmails,
   upsertTestDraft,
@@ -77,12 +80,6 @@ export type Label = {
   name: string;
   color?: { backgroundColor?: string; textColor?: string };
 };
-
-const TEST_LABELS: Label[] = [
-  { id: "Label_vip", name: "VIP" },
-  { id: "Label_receipts", name: "Receipts" },
-  { id: "Label_followup", name: "Follow up" },
-];
 
 export class MailRequestError extends Error {
   constructor(
@@ -445,7 +442,7 @@ export function labelsQueryOptions(accountId: string) {
   return {
     queryKey: labelsQueryKey(accountId),
     queryFn: async (): Promise<Label[]> => {
-      if (isTestAccount(accountId)) return TEST_LABELS;
+      if (isTestAccount(accountId)) return getTestLabels(accountId);
       const data = await fetchJson<{
         labels?: {
           id: string;
@@ -486,7 +483,7 @@ export async function createLabel(
   name: string,
 ): Promise<Label> {
   if (isTestAccount(accountId)) {
-    return { id: `Label_${name.replace(/\s+/g, "_")}_${name.length}`, name };
+    return createTestLabel(accountId, name);
   }
   const data = await fetchJson<{ label: Label }>("/api/labels", {
     method: "POST",
@@ -501,7 +498,10 @@ export async function renameLabel(
   labelId: string,
   name: string,
 ) {
-  if (isTestAccount(accountId)) return;
+  if (isTestAccount(accountId)) {
+    renameTestLabel(accountId, labelId, name);
+    return;
+  }
   await fetchJson("/api/labels", {
     method: "POST",
     headers: { "content-type": "application/json" },

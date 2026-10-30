@@ -1,5 +1,20 @@
 import { parseAddress, splitAddresses } from "@/components/mail/email-html";
 
+/** A saved Gmail draft can have thread identity without RFC reply headers. */
+export function draftReplyContext(message: {
+  threadId: string;
+  inReplyTo?: string;
+  references?: string;
+}) {
+  return message.threadId || message.inReplyTo || message.references
+    ? {
+        threadId: message.threadId || undefined,
+        inReplyTo: message.inReplyTo || undefined,
+        references: message.references || undefined,
+      }
+    : null;
+}
+
 type ReplyMessage = {
   from: string;
   to?: string;

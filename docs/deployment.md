@@ -52,6 +52,7 @@ your production deployment.
    `http://localhost:3000/api/auth/callback/google`; for built preview use
    `http://localhost:8787/api/auth/callback/google`. Register each exact redirect
    you use; changing ports, protocol or hostname changes the URI.
+
 7. Keep the client secret on the server. No Chrome cookies, profiles or Google
    session credentials are read. Google's browser chooser displays signed-in
    accounts when available; the app requests `select_account consent`, state,
@@ -96,6 +97,11 @@ linked Gmail identity. Empty/invalid lists deny access. Existing sessions and
 returning logins are rechecked; removing a primary address revokes app access.
 Removing a linked address blocks token access to that mailbox. There are no
 wildcard/domain shortcuts.
+
+`bun run encrypt-tokens` loads the local `.dev.vars` file. For a remote backfill,
+explicitly provide the original production `BETTER_AUTH_SECRET` in the process
+environment; it takes precedence over the local value. Never use a new/local key
+to rewrite existing production credentials.
 
 `IS_SELF_HOSTED=true` is set in Wrangler vars. This private fork always takes
 unauthenticated users to sign-in. The legacy marketing waitlist does not collect
@@ -195,21 +201,21 @@ unneeded Pub/Sub, assessment or other billable services.
 
 ## Troubleshooting
 
-| Symptom | Action |
-| --- | --- |
-| Setup incomplete / Continue unavailable | Set all required values, minimum 32-character secret, nonempty exact access list and DB binding. |
-| `redirect_uri_mismatch` | Copy exact deployed origin plus `/api/auth/callback/google` into the Web client's authorized redirects. |
-| `access_denied` | Confirm the address is a Google test user and is in ALLOWED_EMAILS; review requested consent and Workspace admin policy. |
-| `email_not_allowed` | Add that primary/linked address to ALLOWED_EMAILS, then restart the OAuth flow. |
-| `invalid_grant`, revoked permission, missing refresh token | Reconnect from the browser chooser and grant offline consent. Test grants normally expire in seven days. |
-| Account already linked to another user | Sign in to that BetterBox user, disconnect there, then add it to the intended user. Never edit ownership to bypass consent. |
-| One account unavailable | Other mail remains visible. Retry that account; for permissions/refresh errors reconnect. |
-| No native Gmail signature | Import requires incremental settings permission; local BetterBox signatures still work. |
-| Remote images absent | Default privacy policy. Opt in per message; administrator must also trust the exact host. |
-| D1 table missing | Apply local or remote migrations to the same binding used by the running environment. |
-| Wrong encryption key | Restore the original BETTER_AUTH_SECRET; never run a backfill to overwrite undecryptable ciphertext. |
-| Preview build EPERM on Windows | Stop the preview started for this repository before rebuilding. |
-| 429 or free quota failure | Wait/back off, inspect Gmail/Cloudflare usage. Do not run mailbox-wide fetches or remove budgets. |
+| Symptom                                                    | Action                                                                                                                      |
+| ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Setup incomplete / Continue unavailable                    | Set all required values, minimum 32-character secret, nonempty exact access list and DB binding.                            |
+| `redirect_uri_mismatch`                                    | Copy exact deployed origin plus `/api/auth/callback/google` into the Web client's authorized redirects.                     |
+| `access_denied`                                            | Confirm the address is a Google test user and is in ALLOWED_EMAILS; review requested consent and Workspace admin policy.    |
+| `email_not_allowed`                                        | Add that primary/linked address to ALLOWED_EMAILS, then restart the OAuth flow.                                             |
+| `invalid_grant`, revoked permission, missing refresh token | Reconnect from the browser chooser and grant offline consent. Test grants normally expire in seven days.                    |
+| Account already linked to another user                     | Sign in to that BetterBox user, disconnect there, then add it to the intended user. Never edit ownership to bypass consent. |
+| One account unavailable                                    | Other mail remains visible. Retry that account; for permissions/refresh errors reconnect.                                   |
+| No native Gmail signature                                  | Import requires incremental settings permission; local BetterBox signatures still work.                                     |
+| Remote images absent                                       | Default privacy policy. Opt in per message; administrator must also trust the exact host.                                   |
+| D1 table missing                                           | Apply local or remote migrations to the same binding used by the running environment.                                       |
+| Wrong encryption key                                       | Restore the original BETTER_AUTH_SECRET; never run a backfill to overwrite undecryptable ciphertext.                        |
+| Preview build EPERM on Windows                             | Stop the preview started for this repository before rebuilding.                                                             |
+| 429 or free quota failure                                  | Wait/back off, inspect Gmail/Cloudflare usage. Do not run mailbox-wide fetches or remove budgets.                           |
 
 Hosted OAuth callbacks, delivered mail, refresh/revocation behavior and production
 CPU remain external checks until the deployment has real credentials and consent.

@@ -1,5 +1,59 @@
 import { afterEach, expect, test } from "bun:test";
-import { mergeAccountProfile } from "./account";
+import { canDisconnectGoogleAccount, mergeAccountProfile } from "./account";
+
+test("dummy mailboxes do not unlock disconnect for the last real Google account", () => {
+  const real = {
+    accountId: "google-sub",
+    email: "owner@example.test",
+    unread: 0,
+  };
+  const dummy = {
+    accountId: "test-owner",
+    email: "demo@example.test",
+    unread: 0,
+  };
+  expect(canDisconnectGoogleAccount([real, dummy], real.accountId)).toBe(false);
+  expect(
+    canDisconnectGoogleAccount(
+      [real, dummy, { ...real, accountId: "another-google" }],
+      real.accountId,
+    ),
+  ).toBe(true);
+  expect(canDisconnectGoogleAccount([real, dummy], dummy.accountId)).toBe(
+    false,
+  );
+});
+import {
+  createLabel,
+  deleteLabel,
+  labelsQueryOptions,
+  renameLabel,
+} from "./mail-queries";
+
+test("demo label changes survive refetches without affecting another account or calling Gmail", async () => {
+  globalThis.fetch = (async () => {
+    throw new Error("Demo must not contact Gmail");
+  }) as unknown as typeof fetch;
+  const account = "test-label-review";
+  const other = "test-label-other";
+  await renameLabel(account, "Label_vip", "Important");
+  expect(await labelsQueryOptions(account).queryFn()).toContainEqual({
+    id: "Label_vip",
+    name: "Important",
+  });
+  const created = await createLabel(account, "Review");
+  expect(await labelsQueryOptions(account).queryFn()).toContainEqual(created);
+  await deleteLabel(account, "Label_vip");
+  expect(
+    (await labelsQueryOptions(account).queryFn()).some(
+      (label) => label.id === "Label_vip",
+    ),
+  ).toBe(false);
+  expect(await labelsQueryOptions(other).queryFn()).toContainEqual({
+    id: "Label_vip",
+    name: "VIP",
+  });
+});
 import {
   fetchEmailsPage,
   mailRetry,

@@ -30,6 +30,7 @@ import { makeDemoAccounts, makeTestAccount } from "@/lib/test-account";
 import { useSession } from "@/lib/auth/auth-client";
 import { fetchSession } from "@/lib/auth/auth-session";
 import { ComposerOpenGuard } from "@/lib/composer-open";
+import { draftReplyContext } from "@/lib/email/reply";
 import { AppSidebar } from "@/components/shell/app-sidebar";
 import { CommandMenu } from "@/components/shell/command-menu";
 import {
@@ -324,14 +325,7 @@ function AppShell() {
               ? ""
               : full.subject,
           body: full.bodyHtml ?? (full.body ? plainToHtml(full.body) : ""),
-          reply:
-            full.inReplyTo || full.references
-              ? {
-                  threadId: full.threadId,
-                  inReplyTo: full.inReplyTo,
-                  references: full.references,
-                }
-              : null,
+          reply: draftReplyContext(full),
           attachments,
         });
         setDraftRef({ accountId, emailId });

@@ -86,6 +86,16 @@ try {
   let response = await fetchAs("/api/accounts");
   assert.equal(response.status, 401);
   check("anonymous mailbox access blocked in workerd");
+  response = await fetchAs(
+    "/api/image-proxy?url=https%3A%2F%2Fimages.example.test%2Fpixel",
+  );
+  assert.equal(response.status, 401);
+  response = await fetchAs(
+    "/api/image-proxy?url=https%3A%2F%2Fimages.example.test%2Fpixel",
+    "owner",
+  );
+  assert.equal(response.status, 400);
+  check("image proxy requires a session and retains the trusted-host gate");
   response = await fetchAs("/api/auth/get-session", "owner");
   assert.equal(response.status, 200);
   assert.equal(

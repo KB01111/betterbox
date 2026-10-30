@@ -22,6 +22,60 @@ const post = (headers: Record<string, string> = {}, body = "{}") =>
   });
 
 describe("private API trust boundary", () => {
+  test("explicit preview permits PDF/plain text while download and active formats stay attachments", () => {
+    for (const mime of ["application/pdf", "text/plain"]) {
+      expect(
+        attachmentResponse(
+          new ArrayBuffer(1),
+          mime,
+          false,
+          "file",
+          true,
+        ).headers.get("content-disposition"),
+      ).toStartWith("inline;");
+      expect(
+        attachmentResponse(
+          new ArrayBuffer(1),
+          mime,
+          true,
+          "file",
+          true,
+        ).headers.get("content-disposition"),
+      ).toStartWith("attachment;");
+      expect(
+        attachmentResponse(new ArrayBuffer(1), mime, false).headers.get(
+          "content-disposition",
+        ),
+      ).toStartWith("attachment;");
+    }
+    expect(
+      attachmentResponse(
+        new ArrayBuffer(1),
+        "text/html",
+        false,
+        "file",
+        true,
+      ).headers.get("content-disposition"),
+    ).toStartWith("attachment;");
+    expect(
+      attachmentResponse(
+        new ArrayBuffer(1),
+        "application/pdf",
+        false,
+        "file",
+        true,
+      ).headers.get("content-security-policy"),
+    ).not.toContain("sandbox");
+    expect(
+      attachmentResponse(
+        new ArrayBuffer(1),
+        "text/html",
+        false,
+        "file",
+        true,
+      ).headers.get("content-security-policy"),
+    ).toContain("sandbox");
+  });
   test("SVG and HTML attachments are downloaded under a scriptless policy", () => {
     for (const mime of [
       "image/svg+xml",

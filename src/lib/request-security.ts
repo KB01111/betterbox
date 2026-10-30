@@ -54,9 +54,13 @@ export function attachmentResponse(
   claimedMime: string,
   download: boolean,
   rawFilename = "attachment",
+  view = false,
 ): Response {
   const mime = claimedMime.toLowerCase();
-  const inline = !download && RASTER_IMAGE_TYPE.test(mime);
+  const inline =
+    !download &&
+    (RASTER_IMAGE_TYPE.test(mime) ||
+      (view && /^(application\/pdf|text\/plain)$/.test(mime)));
   const filename =
     rawFilename.replace(/[^\w.\- ]+/g, "_").slice(0, 200) || "attachment";
   const type = /^[\w.+-]+\/[\w.+-]+$/.test(mime)
@@ -67,7 +71,11 @@ export function attachmentResponse(
       headers: {
         "content-type": inline ? mime : type,
         "content-disposition": `${inline ? "inline" : "attachment"}; filename="${filename}"`,
-        "content-security-policy": "sandbox; default-src 'none'",
+        // Native PDF viewers handle isolation; a CSP sandbox can prevent them loading.
+        "content-security-policy":
+          inline && mime === "application/pdf"
+            ? "default-src 'none'; object-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+            : "sandbox; default-src 'none'",
       },
     }),
   );

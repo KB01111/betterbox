@@ -1,5 +1,25 @@
 import { describe, expect, test } from "bun:test";
-import { replyRecipients, replyTarget } from "./reply";
+import { draftReplyContext, replyRecipients, replyTarget } from "./reply";
+
+test("reopened drafts retain existing Gmail thread context even without RFC reply headers", () => {
+  expect(draftReplyContext({ threadId: "existing-conversation" })).toEqual({
+    threadId: "existing-conversation",
+    inReplyTo: undefined,
+    references: undefined,
+  });
+  expect(
+    draftReplyContext({
+      threadId: "conversation",
+      inReplyTo: "<parent@example>",
+      references: "<root@example>",
+    }),
+  ).toEqual({
+    threadId: "conversation",
+    inReplyTo: "<parent@example>",
+    references: "<root@example>",
+  });
+  expect(draftReplyContext({ threadId: "" })).toBeNull();
+});
 
 describe("reply identity", () => {
   test("reply targets the last received non-draft message instead of a sent reply or draft", () => {
