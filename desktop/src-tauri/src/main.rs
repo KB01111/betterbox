@@ -124,10 +124,10 @@ async fn authenticate(window: &WebviewWindow, mode: &str) -> Result<(), String> 
         .map_err(|_| "Could not display the desktop approval code.")?;
     let approved = rfd::AsyncMessageDialog::new()
         .set_title("BetterBox browser sign-in")
-        .set_description(format!("Your approval code is {}.\n\nCompare this code with the browser page before approving. Keep the BetterBox title bar visible to compare it. The request expires in five minutes.", ticket.user_code))
-        .set_buttons(rfd::MessageButtons::OkCancelCustom("Open browser".into(), "Cancel".into()))
+        .set_description(format!("Your approval code is {}.\n\nSelect OK to open your browser. Compare this code with the browser page before approving. Keep the BetterBox title bar visible to compare it. The request expires in five minutes.", ticket.user_code))
+        .set_buttons(rfd::MessageButtons::OkCancel)
         .show().await;
-    if approved != rfd::MessageDialogResult::Custom("Open browser".into()) {
+    if approved != rfd::MessageDialogResult::Ok {
         return Err("Desktop sign-in was cancelled.".into());
     }
     open::that(&ticket.browser_url).map_err(|_| "Could not open your system browser.")?;

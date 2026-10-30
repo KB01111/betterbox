@@ -1,16 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { authClient } from "@/lib/auth/auth-client";
+import { desktopConnectSearch } from "@/lib/auth/desktop-client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 
 export const Route = createFileRoute("/desktop/connect")({
   ssr: false,
-  validateSearch: (search: Record<string, unknown>) => ({
-    id: typeof search.id === "string" ? search.id : "",
-    connected: search.connected === "1",
-    error: typeof search.error === "string" ? search.error : undefined,
-  }),
+  validateSearch: desktopConnectSearch,
   component: DesktopConnect,
 });
 
