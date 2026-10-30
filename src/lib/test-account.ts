@@ -276,6 +276,8 @@ const FOLDER_MAIL: Record<
   { mail: readonly Mail[]; count: number; self?: boolean; allRead?: boolean }
 > = {
   inbox: { mail: demoMail.senders as unknown as Mail[], count: 120 },
+  unread: { mail: demoMail.senders as unknown as Mail[], count: 30 },
+  starred: { mail: demoMail.senders as unknown as Mail[], count: 15 },
   labeled: { mail: demoMail.senders as unknown as Mail[], count: 8 }, // accordion view; satisfies Record<Folder>
   archived: {
     mail: demoMail.archived as unknown as Mail[],
@@ -348,7 +350,12 @@ export function makeTestEmails(
       subject,
       snippet,
       date: new Date(now - minutesAgo * 60_000).toISOString(),
-      unread: isTestEmailRead(accountId, id) ? false : seedUnread,
+      internalDate: now - minutesAgo * 60_000,
+      starred: folder === "starred" || i % 7 === 0,
+      hasAttachment: i % 5 === 0,
+      unread: isTestEmailRead(accountId, id)
+        ? false
+        : folder === "unread" || seedUnread,
       labelIds: getTestEmailLabelIds(accountId, id),
     };
   });

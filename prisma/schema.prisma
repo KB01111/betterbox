@@ -2,10 +2,11 @@
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
+  runtime  = "cloudflare"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 enum Role {
@@ -50,6 +51,7 @@ model Session {
 model Account {
   id                    String    @id
   accountId             String
+  email                 String?
   providerId            String
   userId                String
   user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -67,6 +69,7 @@ model Account {
 
   @@index([userId])
   @@map("account")
+  @@unique([providerId, accountId])
 }
 
 model Verification {

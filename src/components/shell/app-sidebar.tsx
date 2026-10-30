@@ -6,6 +6,8 @@ import {
   GitPullRequest,
   Inbox,
   MailIcon,
+  MailOpen,
+  Star,
   Tag,
   PenLine,
   Search,
@@ -89,11 +91,13 @@ const INTEGRATIONS: Integration[] = [
     children: [
       {
         id: "inbox",
-        title: "Inbox",
+        title: "All inboxes",
         icon: Inbox,
         folder: "inbox",
         fixed: true,
       },
+      { id: "unread", title: "Unread", icon: MailOpen, folder: "unread" },
+      { id: "starred", title: "Starred", icon: Star, folder: "starred" },
       { id: "labeled", title: "Labeled", icon: Tag, folder: "labeled" },
       { id: "sent", title: "Sent", icon: Send, folder: "sent" },
       { id: "drafts", title: "Drafts", icon: FileText, folder: "drafts" },

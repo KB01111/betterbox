@@ -36,7 +36,7 @@ const cloneDemoSignatures = (): SignaturesData => ({
 
 async function fetchSignatures(): Promise<SignaturesData> {
   const res = await fetch("/api/signatures");
-  if (!res.ok) return { signatures: [], assignments: {} };
+  if (!res.ok) throw new Error("Could not load signatures. Try again.");
   return (await res.json()) as SignaturesData;
 }
 
@@ -104,11 +104,12 @@ export async function removeSignature(id: string): Promise<void> {
     };
     return;
   }
-  await fetch("/api/signatures", {
+  const response = await fetch("/api/signatures", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ op: "delete", id }),
   });
+  if (!response.ok) throw new Error("Could not delete signature. Try again.");
 }
 
 export async function assignSignature(
@@ -122,11 +123,12 @@ export async function assignSignature(
     };
     return;
   }
-  await fetch("/api/signatures", {
+  const response = await fetch("/api/signatures", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ op: "assign", accountId, signatureId }),
   });
+  if (!response.ok) throw new Error("Could not assign signature. Try again.");
 }
 
 export const gmailSignatureQueryKey = (accountId?: string, email?: string) =>

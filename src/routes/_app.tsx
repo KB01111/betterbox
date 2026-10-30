@@ -13,19 +13,23 @@ import { MailIcon, PenLineIcon, SearchIcon } from "lucide-react";
 import { useAccountScope } from "@/hooks/use-account-scope";
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { Account } from "@/lib/account";
-import { useApplyAccent, useSettings } from "@/hooks/use-settings";
+import {
+  updateSettings,
+  useApplyAccent,
+  useSettings,
+} from "@/hooks/use-settings";
 import {
   accountsQueryKey,
   fetchFullEmail,
-  isReplyDraft,
+  invalidateMailQueries,
   markAllAccountRead,
   useAccountsQuery,
 } from "@/lib/mail-queries";
 import { toFolder, type Folder } from "@/lib/folders";
-import { IS_SELF_HOSTED } from "@/lib/env";
 import { makeDemoAccounts, makeTestAccount } from "@/lib/test-account";
 import { useSession } from "@/lib/auth/auth-client";
 import { fetchSession } from "@/lib/auth/auth-session";
+import { ComposerOpenGuard } from "@/lib/composer-open";
 import { AppSidebar } from "@/components/shell/app-sidebar";
 import { CommandMenu } from "@/components/shell/command-menu";
 import {
@@ -39,7 +43,16 @@ import {
   panelPaneId,
   type Reading,
 } from "@/components/mail/inbox-tiles";
-import { LandingPage } from "@/components/landing";
+import {
+  MailViewSwitch,
+  UnifiedMailbox,
+} from "@/components/mail/unified-mailbox";
+import {
+  fetchDraftAttachments,
+  type StagedFile,
+} from "@/components/editor/composer-attachments";
+import { SEARCH_INBOX_EVENT, type SearchInboxDetail } from "@/lib/layout-tree";
+import { toast } from "sonner";
 import {
   SettingsDialog,
   type PageId,
@@ -52,13 +65,14 @@ import { SidebarInset, SidebarTrigger } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 
 export const Route = createFileRoute("/_app")({
+  ssr: false,
   // Resolve session in a cached loader, not beforeLoad (which re-runs every nav,
   // adding a 2-5s remote-DB round-trip per open/switch). Loader resolves once for
   // first paint + auth guard; client useSession() gives live updates after.
   loader: async () => {
     const session = await fetchSession();
     // Self-hosted has no marketing layer: unauthenticated → sign-in, not landing.
-    if (IS_SELF_HOSTED && !session) {
+    if (!session) {
       throw redirect({ to: "/sign-in" });
     }
     return { session };
@@ -69,6 +83,8 @@ export const Route = createFileRoute("/_app")({
 
 const FOLDER_PATH = {
   inbox: "/",
+  unread: "/unread",
+  starred: "/starred",
   labeled: "/labeled",
   sent: "/sent",
   drafts: "/drafts",
@@ -79,6 +95,8 @@ const FOLDER_PATH = {
 
 const PATH_FOLDER: Record<string, Folder> = {
   "/": "inbox",
+  "/unread": "unread",
+  "/starred": "starred",
   "/labeled": "labeled",
   "/sent": "sent",
   "/drafts": "drafts",
@@ -102,7 +120,7 @@ const EMPTY_COMPOSE: ComposerContent = {
 function AppShell() {
   useApplyAccent();
   const isMobile = useIsMobile();
-  const { devTools, demoMode, composerMode } = useSettings();
+  const { devTools, demoMode, composerMode, mailView } = useSettings();
   // Use the loader's session until the client query settles, so the auth branch
   // is correct on the very first paint.
   const { session: serverSession } = Route.useLoaderData();
@@ -113,19 +131,18 @@ function AppShell() {
   const matchRoute = useMatchRoute();
   const location = useLocation();
   const [cmdOpen, setCmdOpen] = useState(false);
-  const { data: accounts } = useAccountsQuery(!!session);
+  const { data: accounts } = useAccountsQuery(!!session, session?.user.id);
+  const [globalSearch, setGlobalSearch] = useState("");
   const [testAccounts, setTestAccounts] = useState<Account[]>([]);
 
   // Fresh sign-in: the OAuth callback lands here once a session exists.
   // Invalidate ["accounts"] so the linked primary inbox refetches even if
   // something cached an empty list.
   const signedInUserId = session?.user?.id;
-  useEffect(() => {
-    if (signedInUserId) {
-      queryClient.invalidateQueries({ queryKey: accountsQueryKey });
-    }
-  }, [signedInUserId, queryClient]);
-
+  const previousUser = useRef(signedInUserId);
+  const currentUser = useRef(signedInUserId);
+  currentUser.current = signedInUserId;
+  const composerOpenGuard = useRef(new ComposerOpenGuard());
   const addTestAccount = useCallback(() => {
     setTestAccounts((current) => [
       ...current,
@@ -221,7 +238,10 @@ function AppShell() {
     [navigate, folder],
   );
   const openFolder = useCallback(
-    (next: Folder) => navigate({ to: FOLDER_PATH[next] }),
+    (next: Folder) => {
+      setGlobalSearch("");
+      return navigate({ to: FOLDER_PATH[next] });
+    },
     [navigate],
   );
   const openSettings = useCallback((page?: PageId) => {
@@ -231,13 +251,12 @@ function AppShell() {
     setSettingsOpen(true);
   }, []);
   // ⌘K "Open GitHub …" — add the panel to the board (no-op if already open).
-  const openPanel = useCallback(
-    (key: string) =>
-      setOpenPanels((panels) =>
-        panels.includes(key) ? panels : [...panels, key],
-      ),
-    [],
-  );
+  const openPanel = useCallback((key: string) => {
+    updateSettings({ mailView: "board" });
+    setOpenPanels((panels) =>
+      panels.includes(key) ? panels : [...panels, key],
+    );
+  }, []);
 
   const [composeOpen, setComposeOpen] = useState(false);
   /* Composer fields live here (not in Composer) so they survive remounts:
@@ -254,47 +273,92 @@ function AppShell() {
     accountId: string;
     emailId: string;
   } | null>(null);
+  useEffect(() => {
+    if (previousUser.current !== signedInUserId) {
+      composerOpenGuard.current.cancel();
+      composeContent.draftSession?.cancel();
+      void queryClient.cancelQueries();
+      queryClient.clear();
+      setTestAccounts([]);
+      setComposeContent(EMPTY_COMPOSE);
+      setComposeOpen(false);
+      setDraftRef(null);
+      previousUser.current = signedInUserId;
+    }
+  }, [signedInUserId, queryClient, composeContent.draftSession]);
+  useEffect(() => {
+    if (signedInUserId)
+      void queryClient.invalidateQueries({ queryKey: accountsQueryKey });
+  }, [signedInUserId, queryClient]);
   const openCompose = useCallback(() => {
+    if (composeOpen || composerOpenGuard.current.pending) {
+      toast("Close or send the current message before starting another.");
+      return;
+    }
     setComposeContent(EMPTY_COMPOSE);
     setDraftRef(null);
     setComposeOpen(true);
-  }, []);
+  }, [composeOpen]);
   const editDraft = useCallback(
     async (accountId: string, emailId: string) => {
-      // A reply-draft belongs to a thread — open it in the reader, not the composer.
+      if (composeOpen || composerOpenGuard.current.pending) {
+        toast("Close the current message before opening another draft.");
+        return;
+      }
+      const ticket = composerOpenGuard.current.begin(signedInUserId);
+      if (!ticket) return;
+      const loadingToast = toast.loading("Opening draft…");
       try {
         const full = await fetchFullEmail(accountId, emailId);
-        if (isReplyDraft(full)) {
-          openEmail(accountId, emailId);
+        const attachments = await fetchDraftAttachments(accountId, full);
+        if (!composerOpenGuard.current.canCommit(ticket, currentUser.current))
           return;
-        }
         // Seed the composer from the draft (the fetch already happened here).
         setComposeContent({
           fromId: accountId,
           to: full.to ?? "",
           cc: full.cc ?? "",
-          bcc: "",
+          bcc: full.bcc ?? "",
           subject:
             !full.subject || full.subject === "(no subject)"
               ? ""
               : full.subject,
           body: full.bodyHtml ?? (full.body ? plainToHtml(full.body) : ""),
-          reply: null,
+          reply:
+            full.inReplyTo || full.references
+              ? {
+                  threadId: full.threadId,
+                  inReplyTo: full.inReplyTo,
+                  references: full.references,
+                }
+              : null,
+          attachments,
         });
         setDraftRef({ accountId, emailId });
         setComposeOpen(true);
         return;
-      } catch {
-        /* fall through — open an empty composer pointed at this draft */
+      } catch (error) {
+        if (!composerOpenGuard.current.canCommit(ticket, currentUser.current))
+          return;
+        toast.error("Could not open draft", {
+          description:
+            error instanceof Error
+              ? error.message
+              : "Try again. Your Gmail draft is unchanged.",
+        });
+      } finally {
+        composerOpenGuard.current.finish(ticket);
+        toast.dismiss(loadingToast);
       }
-      setComposeContent({ ...EMPTY_COMPOSE, fromId: accountId });
-      setDraftRef({ accountId, emailId });
-      setComposeOpen(true);
     },
-    [openEmail],
+    [composeOpen, signedInUserId],
   );
   useEffect(() => {
     const onOpenCompose = (e: Event) => {
+      if (composeOpen || composerOpenGuard.current.pending) {
+        toast("Close or send the current message before starting another.");
+        return;
+      }
       const detail = (e as CustomEvent)?.detail as
         | {
             accountId?: string;
@@ -306,6 +370,7 @@ function AppShell() {
             /** Pre-built HTML (used as-is) — reply-all's quoted body. */
             html?: string;
             reply?: ReplyContext;
+            attachments?: StagedFile[];
           }
         | undefined;
       setComposeContent({
@@ -316,19 +381,30 @@ function AppShell() {
         subject: detail?.subject ?? "",
         body: detail?.html ?? (detail?.body ? plainToHtml(detail.body) : ""),
         reply: detail?.reply ?? null,
+        attachments: detail?.attachments ?? [],
       });
       setDraftRef(null);
       setComposeOpen(true);
     };
     window.addEventListener("open-compose", onOpenCompose);
     return () => window.removeEventListener("open-compose", onOpenCompose);
-  }, []);
+  }, [composeOpen]);
+  useEffect(() => {
+    const onSearch = (event: Event) => {
+      const detail = (event as CustomEvent<SearchInboxDetail>).detail;
+      if (!detail) return;
+      if (detail.accountId !== "all") only(detail.accountId);
+      updateSettings({ mailView: "unified" });
+      setGlobalSearch(detail.query);
+    };
+    window.addEventListener(SEARCH_INBOX_EVENT, onSearch);
+    return () => window.removeEventListener(SEARCH_INBOX_EVENT, onSearch);
+  }, [only]);
 
   const markAccountRead = useCallback(
     async (accountId: string) => {
       await markAllAccountRead(accountId);
-      queryClient.invalidateQueries({ queryKey: ["emails", accountId] });
-      queryClient.invalidateQueries({ queryKey: accountsQueryKey });
+      invalidateMailQueries(queryClient, accountId);
     },
     [queryClient],
   );
@@ -367,11 +443,12 @@ function AppShell() {
       }
       if (e.key === "i" && Date.now() - lastGPress.current < 1000) {
         toggle("all");
+        openFolder("inbox");
       }
     };
     document.addEventListener("keydown", down);
     return () => document.removeEventListener("keydown", down);
-  }, [accountIds, only, toggle, openCompose]);
+  }, [accountIds, only, toggle, openCompose, openFolder]);
 
   // `booting` covers session fetch + first accounts load: render the shell with
   // skeleton account/user blocks so the sidebar never shows up late.
@@ -380,8 +457,7 @@ function AppShell() {
   if (!session) {
     // The cached loader guard won't re-trigger on client-side sign-out, so
     // handle it here: self-host → sign-in, hosted → marketing landing.
-    if (IS_SELF_HOSTED) return <Navigate to="/sign-in" />;
-    return <LandingPage />;
+    return <Navigate to="/sign-in" />;
   }
 
   return (
@@ -409,7 +485,10 @@ function AppShell() {
       />
       {/* Pane mode docks the composer in the board (below), but the board isn't
           mounted on dev pages and mobile has no room — fall back to the popout. */}
-      {(composerMode === "popout" || onDevPage || isMobile) && (
+      {(mailView === "unified" ||
+        composerMode === "popout" ||
+        onDevPage ||
+        isMobile) && (
         <Composer
           open={composeOpen}
           onOpenChange={setComposeOpen}
@@ -467,8 +546,8 @@ function AppShell() {
         <div className="relative min-h-0 w-full max-w-full flex-1 overflow-hidden">
           {onDevPage ? null : allAccounts === null ? (
             <LoadingScreen label="Loading accounts" fill />
-          ) : (
-            <InboxTiles
+          ) : mailView === "unified" ? (
+            <UnifiedMailbox
               accounts={allAccounts}
               scopeIds={scopeIds}
               folder={folder}
@@ -476,21 +555,41 @@ function AppShell() {
               onOpenEmail={openEmail}
               onEditDraft={editDraft}
               onCloseReader={closeReader}
-              onRemovePane={toggle}
-              extraPaneIds={openPanels.map(panelPaneId)}
-              onClosePanel={closePanelPane}
-              compose={
-                composerMode === "pane" && !isMobile
-                  ? {
-                      open: composeOpen,
-                      draftRef,
-                      content: composeContent,
-                      onContentChange: patchComposeContent,
-                      onOpenChange: setComposeOpen,
-                    }
-                  : null
-              }
+              onToggleScope={toggle}
+              search={globalSearch}
+              onSearchChange={setGlobalSearch}
             />
+          ) : (
+            <div className="flex h-full min-h-0 flex-col">
+              <div className="flex shrink-0 justify-end border-b p-2">
+                <MailViewSwitch />
+              </div>
+              <div className="min-h-0 flex-1">
+                <InboxTiles
+                  accounts={allAccounts}
+                  scopeIds={scopeIds}
+                  folder={folder}
+                  reading={reading}
+                  onOpenEmail={openEmail}
+                  onEditDraft={editDraft}
+                  onCloseReader={closeReader}
+                  onRemovePane={toggle}
+                  extraPaneIds={openPanels.map(panelPaneId)}
+                  onClosePanel={closePanelPane}
+                  compose={
+                    composerMode === "pane" && !isMobile
+                      ? {
+                          open: composeOpen,
+                          draftRef,
+                          content: composeContent,
+                          onContentChange: patchComposeContent,
+                          onOpenChange: setComposeOpen,
+                        }
+                      : null
+                  }
+                />
+              </div>
+            </div>
           )}
           <Outlet />
         </div>

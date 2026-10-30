@@ -8,6 +8,8 @@ const SHORTCUTS: { label: string; keys: string[]; soon?: boolean }[] = [
   { label: "Go to inbox (all accounts)", keys: ["G", "I"] },
   { label: "Switch account 1–9", keys: ["⌥", "1–9"] },
   { label: "Toggle raw source", keys: ["⌥", "R"] },
+  { label: "Focus global search (unified view)", keys: ["/"] },
+  { label: "Move between message rows", keys: ["↑", "↓"] },
 ];
 
 export function KeyboardPage() {

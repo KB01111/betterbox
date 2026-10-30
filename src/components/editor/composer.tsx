@@ -1,10 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import {
   CheckIcon,
   ChevronDownIcon,
   EyeIcon,
   GripVerticalIcon,
-  History,
   PaperclipIcon,
   PencilIcon,
   PenLineIcon,
@@ -24,18 +30,19 @@ import { cn } from "@/lib/utils";
 import type { Account } from "@/lib/account";
 import {
   deleteDraft,
+  invalidateMailQueries,
   resolveDraftId,
   saveDraft,
   sendNewEmail,
   useContactsQuery,
 } from "@/lib/mail-queries";
 import { isTestAccount } from "@/lib/test-account";
+import { clearDraftBuffer } from "@/lib/draft-buffer";
 import {
-  clearDraftBuffer,
-  loadDraftBuffer,
-  saveDraftBuffer,
-  type BufferedDraft,
-} from "@/lib/draft-buffer";
+  DraftSaveQueue,
+  resolveSender,
+  type DraftPayload,
+} from "@/lib/draft-save";
 import { AccountDot } from "@/components/shell/account-dot";
 import { RichTextEditor } from "@/components/editor/rich-text-editor";
 import { IconButton } from "@/components/shared/icon-button";
@@ -87,6 +94,9 @@ import { PreviewBody } from "@/components/editor/composer-preview";
 // Feathers all four edges of the blur halo by 30px (intersected) so it fades out instead of a hard rectangle.
 const HALO_FEATHER =
   "linear-gradient(to right, transparent, #000 30px, #000 calc(100% - 30px), transparent), linear-gradient(to bottom, transparent, #000 30px, #000 calc(100% - 30px), transparent)";
+const NO_ATTACHMENTS: StagedFile[] = [];
+const subscribeIdle = () => () => {};
+const getIdleOperation = () => null;
 
 /** Threading headers nesting a sent message under a conversation (set by reply/reply-all; null for fresh compose). */
 export type ReplyContext = {
@@ -106,10 +116,13 @@ export type ComposerContent = {
   body: string;
   /** Present when the composer was opened as a reply-all (threads the send). */
   reply: ReplyContext | null;
+  attachments?: StagedFile[];
+  /** In-memory identity and pending saves survive pane/popout remounts. */
+  draftSession?: DraftSaveQueue;
 };
 
 /** Docked composer for a new message (fixed bottom-right panel, not a Dialog). Borderless field
- *  rows, 44px label column, mono To / sans Subject, ⌘↵ sends. Replies happen inline in the reader. */
+ *  rows, 44px label column, mono To / sans Subject, ⌘↵ sends. Replies share this draft lifecycle. */
 export function Composer({
   open,
   onOpenChange,
@@ -151,7 +164,11 @@ export function Composer({
   // Preview renders the body as the recipient sees it (rich text → HTML).
   const [preview, setPreview] = useState(false);
   // Files staged for this message, read to base64 in the browser.
-  const [files, setFiles] = useState<StagedFile[]>([]);
+  const files = content.attachments ?? NO_ATTACHMENTS;
+  const setFiles = (next: StagedFile[]) =>
+    onContentChange({ attachments: next });
+  const filesRef = useRef(files);
+  filesRef.current = files;
   const fileInputRef = useRef<HTMLInputElement>(null);
   // The editor's live doc model (TipTap JSON), serialized to email-safe HTML on send/preview.
   // Re-emitted by the editor on mount, so it survives composer remounts (pane↔popout).
@@ -171,36 +188,69 @@ export function Composer({
   const [confirmOpen, setConfirmOpen] = useState(false);
   // True once Send was attempted with a hard blocker — turns on the inline field cues.
   const [triedSend, setTriedSend] = useState(false);
-  // Autosave: the Gmail draft created/updated this session (fresh composes).
-  const autosaveRef = useRef<{ draftId: string; messageId: string } | null>(
-    null,
-  );
-  // Coalesce overlapping autosaves into one in-flight save (see flushAutosave).
-  const savingRef = useRef(false);
-  const pendingAutosaveRef = useRef(false);
-  const autosavePayloadRef = useRef<{
-    accountId: string;
-    to: string;
-    cc?: string;
-    bcc?: string;
-    subject: string;
-    html: string;
-  } | null>(null);
+  const [closing, setClosing] = useState(false);
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved">(
     "idle",
   );
-  // Editing an opened draft: once its Gmail draft id resolves (autosaveRef seeded),
-  // autosave UPDATEs it in place. Until then — or if no draft matches — the skip holds.
-  const [draftResolved, setDraftResolved] = useState(false);
-  const draftIdCheckedRef = useRef<string | null>(null);
 
   // From: explicit pick (fromId) wins, then default send-from, then primary inbox, then first sendable.
-  const from =
-    sendable.find((a) => a.accountId === fromId) ??
-    sendable.find((a) => a.accountId === defaultSendFrom) ??
-    sendable.find((a) => a.email === session?.user.email) ??
-    sendable[0] ??
-    null;
+  const from = resolveSender(
+    sendable,
+    draft?.accountId ?? fromId,
+    defaultSendFrom,
+    session?.user.email,
+  );
+  const availableAccountsRef = useRef(sendable);
+  availableAccountsRef.current = sendable;
+  const draftSession = useMemo(() => {
+    if (content.draftSession) return content.draftSession;
+    if (!from) return null;
+    const existing = draft;
+    return new DraftSaveQueue(
+      from.accountId,
+      saveDraft,
+      existing
+        ? async () => {
+            const draftId = await resolveDraftId(
+              existing.accountId,
+              existing.emailId,
+            );
+            return draftId ? { draftId, messageId: existing.emailId } : null;
+          }
+        : undefined,
+    );
+  }, [content.draftSession, from, draft]);
+  const operation = useSyncExternalStore(
+    draftSession?.subscribe ?? subscribeIdle,
+    draftSession?.getOperation ?? getIdleOperation,
+    getIdleOperation,
+  );
+  const working = sending || closing || operation !== null;
+  const senderLocked = !!draft || !!draftSession?.started;
+  useEffect(() => {
+    if (!open || !from || !draftSession) return;
+    if (!fromId || !content.draftSession) {
+      onContentChange({ fromId: from.accountId, draftSession });
+    }
+  }, [open, from, fromId, content.draftSession, draftSession, onContentChange]);
+  // Retire the former disk recovery buffer; mailbox content stays in memory and Gmail.
+  useEffect(() => {
+    void clearDraftBuffer();
+  }, []);
+  useEffect(
+    () => () => {
+      if (sendTimerRef.current) {
+        clearTimeout(sendTimerRef.current);
+        sendTimerRef.current = null;
+        draftSession?.endOperation();
+        toast("Send cancelled", {
+          description:
+            "The composer moved. Review your message and send again.",
+        });
+      }
+    },
+    [draftSession],
+  );
 
   // People you've emailed before — feeds the To autocomplete.
   const contacts = useContactsQuery(from?.accountId, open).data ?? [];
@@ -280,131 +330,112 @@ export function Composer({
     ? appendSig(emailSafeBody)
     : emailSafeBody;
 
-  // Save the latest payload to Gmail Drafts, one in flight at a time. A save requested while one runs
-  // is coalesced into a single later flush (newest payload), so overlapping debounced saves can't each
-  // issue a drafts.create and duplicate the draft.
-  const flushAutosave = useCallback(() => {
-    const payload = autosavePayloadRef.current;
-    if (!payload) return;
-    if (savingRef.current) {
-      pendingAutosaveRef.current = true;
-      return;
-    }
-    savingRef.current = true;
-    setSaveStatus("saving");
-    void saveDraft({ ...payload, draftId: autosaveRef.current?.draftId }).then(
-      (res) => {
-        savingRef.current = false;
-        if (res) {
-          autosaveRef.current = res;
-          setSaveStatus("saved");
-          // Gmail holds the draft now — drop the local backstop.
-          void clearDraftBuffer();
-          queryClient.invalidateQueries({
-            queryKey: ["emails", payload.accountId],
-          });
-        } else {
-          setSaveStatus("idle");
-        }
-        if (pendingAutosaveRef.current) {
-          pendingAutosaveRef.current = false;
-          flushAutosave();
-        }
-      },
-    );
-  }, [queryClient]);
-
-  // Debounced autosave. Fresh composes, plus opened drafts once their Gmail draft id resolves
-  // (autosaveRef seeded → flush UPDATEs in place). Mirrors the latest payload into a ref so the coalesced flush sees it.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: deps are narrowed to accountId/emailId on purpose — re-arm on an account or draft switch, not on every `from`/`draft` object identity.
+  const draftPayload = useMemo<DraftPayload | null>(
+    () =>
+      from
+        ? {
+            accountId: from.accountId,
+            to: to.trim(),
+            cc: cc.trim() || undefined,
+            bcc: bcc.trim() || undefined,
+            subject,
+            html: body,
+            inReplyTo: reply?.inReplyTo,
+            references: reply?.references,
+            threadId: reply?.threadId,
+            attachments: files.map((file) => ({
+              filename: file.name,
+              mimeType: file.type,
+              contentBase64: file.base64,
+              contentId: file.contentId,
+            })),
+          }
+        : null,
+    [from, to, cc, bcc, subject, body, reply, files],
+  );
+  const latestPayloadRef = useRef(draftPayload);
+  latestPayloadRef.current = draftPayload;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: any content change makes the last confirmed save stale.
   useEffect(() => {
-    const has =
-      to.trim().length > 0 || subject.trim().length > 0 || body.length > 0;
-    if (!open || !from || (draft && !draftResolved) || !has) {
-      autosavePayloadRef.current = null;
+    setSaveStatus("idle");
+  }, [draftPayload]);
+  const persistDraft = useCallback(
+    async (payload: DraftPayload) => {
+      if (!draftSession)
+        throw new Error("Choose a sending account before saving.");
+      setSaveStatus("saving");
+      try {
+        const identity = await draftSession.save(payload);
+        setSaveStatus(latestPayloadRef.current === payload ? "saved" : "idle");
+        setError(null);
+        queryClient.invalidateQueries({
+          queryKey: ["emails", payload.accountId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["unified-mail", payload.accountId],
+        });
+        return identity;
+      } catch (err) {
+        setSaveStatus("idle");
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not save draft. Your message is still open.",
+        );
+        throw err;
+      }
+    },
+    [draftSession, queryClient],
+  );
+  useEffect(() => {
+    const has = !!(
+      to.trim() ||
+      cc.trim() ||
+      bcc.trim() ||
+      subject.trim() ||
+      body ||
+      files.length
+    );
+    if (
+      !open ||
+      sending ||
+      closing ||
+      !draftPayload ||
+      (!has && !draftSession?.started && !draft)
+    )
       return;
-    }
-    autosavePayloadRef.current = {
-      accountId: from.accountId,
-      to: to.trim(),
-      cc: cc.trim() || undefined,
-      bcc: bcc.trim() || undefined,
-      subject,
-      html: body,
-    };
-    const timer = setTimeout(flushAutosave, 2000);
+    const timer = setTimeout(() => {
+      void persistDraft(draftPayload).catch(() => {});
+    }, 2000);
     return () => clearTimeout(timer);
   }, [
     open,
-    from?.accountId,
-    draft?.emailId,
-    draftResolved,
+    sending,
+    closing,
+    draftPayload,
+    draftSession,
+    draft,
     to,
     cc,
     bcc,
     subject,
     body,
-    flushAutosave,
+    files.length,
+    persistDraft,
   ]);
-
-  // Opened an existing draft: resolve its Gmail draft id once, seed autosaveRef so autosave (and
-  // close) UPDATE it in place instead of duplicating. Test drafts key by message id. No match → skip holds.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-resolve on draft switch only, not on every `draft` identity.
   useEffect(() => {
-    if (!open || !draft) {
-      draftIdCheckedRef.current = null;
-      setDraftResolved(false);
+    if (
+      !open ||
+      saveStatus === "saved" ||
+      !(to || cc || bcc || subject || body || files.length)
+    )
       return;
-    }
-    if (draftIdCheckedRef.current === draft.emailId) return;
-    draftIdCheckedRef.current = draft.emailId;
-    setDraftResolved(false);
-    const { accountId, emailId } = draft;
-    void resolveDraftId(accountId, emailId).then((draftId) => {
-      if (draftId && draftIdCheckedRef.current === emailId) {
-        autosaveRef.current = { draftId, messageId: emailId };
-        setDraftResolved(true);
-      }
-    });
-  }, [open, draft?.accountId, draft?.emailId]);
-
-  // Offline backstop: mirror in-progress content to a local IndexedDB buffer, faster than the 2s Gmail
-  // autosave so the freshest content survives a crash/offline tab. Fresh composes only; skips demo accounts.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: from is captured via accountId; the buffer fns are stable.
-  useEffect(() => {
-    const has =
-      to.trim().length > 0 || subject.trim().length > 0 || body.length > 0;
-    if (!open || !from || draft || isTestAccount(from.accountId) || !has)
-      return;
-    const t = setTimeout(() => {
-      void saveDraftBuffer({ fromId, to, cc, bcc, subject, body });
-    }, 700);
-    return () => clearTimeout(t);
-  }, [open, from?.accountId, draft, fromId, to, cc, bcc, subject, body]);
-
-  // On a fresh, empty compose, offer back any uncommitted buffer the last session left. Checked once per open.
-  const [recovered, setRecovered] = useState<BufferedDraft | null>(null);
-  const recoveryCheckedRef = useRef(false);
-  useEffect(() => {
-    if (!open) {
-      recoveryCheckedRef.current = false;
-      setRecovered(null);
-      return;
-    }
-    if (recoveryCheckedRef.current) return;
-    recoveryCheckedRef.current = true;
-    const empty =
-      !draft &&
-      to.trim() === "" &&
-      cc.trim() === "" &&
-      bcc.trim() === "" &&
-      subject.trim() === "" &&
-      body.trim() === "";
-    if (!empty) return;
-    void loadDraftBuffer().then((b) => {
-      if (b && (b.to || b.subject || b.body)) setRecovered(b);
-    });
-  }, [open, draft, to, cc, bcc, subject, body]);
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [open, saveStatus, to, cc, bcc, subject, body, files.length]);
 
   // Show the "save as snippet" bubble while a non-empty passage is selected. Positioned from the live
   // DOM selection rect; cleared on collapse/blur (the bubble preventDefaults mousedown to keep the selection).
@@ -451,26 +482,6 @@ export function Composer({
 
   if (!open) return null;
 
-  const restoreBuffer = () => {
-    if (!recovered) return;
-    onContentChange({
-      fromId: recovered.fromId,
-      to: recovered.to,
-      cc: recovered.cc,
-      bcc: recovered.bcc,
-      subject: recovered.subject,
-      body: recovered.body,
-    });
-    if (recovered.cc.trim()) setCcShown(true);
-    if (recovered.bcc.trim()) setBccShown(true);
-    setRecovered(null);
-  };
-
-  const dismissRecovery = () => {
-    setRecovered(null);
-    void clearDraftBuffer();
-  };
-
   // Save the highlighted passage as a reusable snippet: capture the selection's HTML (formatting kept)
   // and hand it to Settings → Snippets, which opens a new snippet pre-filled (trigger set in the real editor).
   const saveAsSnippet = () => {
@@ -494,13 +505,17 @@ export function Composer({
   const ccValid = cc.trim().length === 0 || isValidRecipients(cc);
   const bccValid = bcc.trim().length === 0 || isValidRecipients(bcc);
 
-  const hasContent =
-    to.trim().length > 0 || subject.trim().length > 0 || body.length > 0;
+  const hasContent = !!(
+    to.trim() ||
+    cc.trim() ||
+    bcc.trim() ||
+    subject.trim() ||
+    body ||
+    files.length
+  );
 
   const refreshDrafts = (accountId: string) => {
-    queryClient.invalidateQueries({ queryKey: ["emails", accountId] });
-    // Drop the cached full-email so re-opening an edited draft shows new content.
-    queryClient.invalidateQueries({ queryKey: ["email", accountId] });
+    invalidateMailQueries(queryClient, accountId);
   };
 
   const reset = () => {
@@ -512,13 +527,15 @@ export function Composer({
       subject: "",
       body: "",
       reply: null,
+      attachments: [],
+      draftSession: undefined,
     });
     setBccShown(false);
     setCcShown(false);
     setError(null);
     setSending(false);
+    setClosing(false);
     setPreview(false);
-    setFiles([]);
     setBodyDoc(null);
     setConfirmOpen(false);
     setTriedSend(false);
@@ -526,52 +543,60 @@ export function Composer({
       clearTimeout(sendTimerRef.current);
       sendTimerRef.current = null;
     }
-    autosaveRef.current = null;
-    draftIdCheckedRef.current = null;
-    setDraftResolved(false);
     setSaveStatus("idle");
     setSignatureSkipped(false);
+    draftSession?.endOperation();
     onOpenChange(false);
   };
 
-  // Closing saves the content as a Gmail draft (fresh composes) or updates the opened one in place
-  // (via autosaveRef.draftId, once resolved). An opened draft whose id never resolved is left untouched.
-  const close = () => {
-    const skipExisting =
-      draft != null &&
-      !draftResolved &&
-      from != null &&
-      !isTestAccount(from.accountId);
-    if (from && hasContent && !skipExisting) {
-      void saveDraft({
-        accountId: from.accountId,
-        id: draft?.emailId,
-        draftId: autosaveRef.current?.draftId,
-        to: to.trim(),
-        cc: cc.trim() || undefined,
-        bcc: bcc.trim() || undefined,
-        subject,
-        html: body,
-      }).then(() => refreshDrafts(from.accountId));
-      if (isTestAccount(from.accountId)) toast("Saved to drafts");
+  // Closing joins the autosave queue and only clears editable content after Gmail confirms it.
+  const close = async () => {
+    if (working) return;
+    if (!hasContent && !draft && !draftSession?.started) return reset();
+    if (!draftPayload) {
+      setError(
+        "The sending account is disconnected. Reconnect it to save this message.",
+      );
+      return;
     }
-    reset();
+    if (!draftSession?.beginOperation("close")) return;
+    setClosing(true);
+    try {
+      await persistDraft(draftPayload);
+      if (!draftSession.active) return;
+      refreshDrafts(draftPayload.accountId);
+      reset();
+    } catch {
+      setClosing(false);
+      draftSession.endOperation();
+    }
   };
 
-  // Discard throws the message away and trashes its draft so it doesn't linger. autosaveRef holds the
-  // current message id (a draft update re-mints it); fall back to the opened draft's id before any save.
-  const discard = () => {
-    if (from) {
-      const messageId = autosaveRef.current?.messageId ?? draft?.emailId;
-      if (messageId) {
-        void deleteDraft(from.accountId, messageId)
-          .then(() => refreshDrafts(from.accountId))
-          .catch(() => {});
-        if (isTestAccount(from.accountId)) toast("Draft discarded");
+  const discard = async () => {
+    if (working) return;
+    if (
+      hasContent &&
+      !window.confirm("Discard this draft? This cannot be undone.")
+    )
+      return;
+    if (draftSession && !draftSession.beginOperation("close")) return;
+    setClosing(true);
+    try {
+      const saved = await draftSession?.drain();
+      if (draftSession && !draftSession.active) return;
+      const messageId = saved?.messageId ?? draft?.emailId;
+      const accountId = draftSession?.accountId ?? draft?.accountId;
+      if (accountId && messageId) {
+        await deleteDraft(accountId, messageId);
+        if (draftSession && !draftSession.active) return;
+        refreshDrafts(accountId);
       }
+      reset();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not discard draft.");
+      setClosing(false);
+      draftSession?.endOperation();
     }
-    void clearDraftBuffer();
-    reset();
   };
 
   const onPickFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -586,33 +611,51 @@ export function Composer({
       });
     }
     if (allowed.length === 0) return;
+    if (!draftSession?.beginOperation("attachments")) return;
     try {
       const staged = await Promise.all(allowed.map(readFileAsBase64));
-      setFiles((prev) => {
-        const next = [...prev, ...staged];
+      if (draftSession && !draftSession.active) return;
+      {
+        const next = [...filesRef.current, ...staged];
         // ~25 MB decoded ≈ 34 MB of base64 — Gmail's send ceiling.
         if (next.reduce((s, f) => s + f.base64.length, 0) > 34_000_000) {
           toast.error("Attachments too large", { description: "25 MB max." });
-          return prev;
+          return;
         }
-        return next;
-      });
+        setFiles(next);
+      }
     } catch {
       toast.error("Couldn’t read that file");
+    } finally {
+      draftSession.endOperation();
     }
   };
-  const removeFile = (id: string) =>
-    setFiles((prev) => prev.filter((f) => f.id !== id));
+  const removeFile = (id: string) => setFiles(files.filter((f) => f.id !== id));
 
   // The actual dispatch, fired after the undo window elapses.
   const doSend = async () => {
-    if (!from) return;
+    if (!from || !draftPayload) return;
     setSending(true);
     setError(null);
-    const sandbox = isTestAccount(from.accountId);
     try {
-      await sendNewEmail({
+      if (
+        !availableAccountsRef.current.some(
+          (account) => account.accountId === from.accountId,
+        )
+      ) {
+        throw new Error(
+          "The sending account is disconnected. Reconnect it before sending.",
+        );
+      }
+      const saved = await persistDraft({
+        ...draftPayload,
+        html: emailSafeHtml,
+      });
+      if (!draftSession?.active)
+        throw new Error("This composer is no longer active.");
+      const result = await sendNewEmail({
         accountId: from.accountId,
+        draftId: saved.draftId,
         to: to.trim(),
         cc: cc.trim() || undefined,
         bcc: bcc.trim() || undefined,
@@ -626,18 +669,14 @@ export function Composer({
           filename: f.name,
           mimeType: f.type,
           contentBase64: f.base64,
+          contentId: f.contentId,
         })),
       });
-      // The draft (opened or autosave-created) is now a copy of this sent message — trash it.
-      const draftMessageId = autosaveRef.current?.messageId ?? draft?.emailId;
-      if (draftMessageId) {
-        await deleteDraft(from.accountId, draftMessageId).catch(() => {});
-        autosaveRef.current = null;
-        refreshDrafts(from.accountId);
-      }
-      if (sandbox) {
-        toast("Demo: message not sent", {
-          description: "This is a sandbox. Nothing actually left BetterBox.",
+      if (!draftSession.active) return;
+      refreshDrafts(from.accountId);
+      if (result.simulated) {
+        toast("Simulation: message not sent", {
+          description: "Your message is saved in Drafts. Nothing was sent.",
         });
       } else {
         toast.success("Message sent", { description: `To ${to.trim()}` });
@@ -645,18 +684,26 @@ export function Composer({
       // Sent — drop the local backstop.
       void clearDraftBuffer();
       setSending(false);
+      draftSession?.endOperation();
       reset();
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setError(message);
       toast.error("Couldn’t send message", { description: message });
       setSending(false);
+      draftSession?.endOperation();
     }
   };
 
   // Undo-send: hold the message for a few seconds with a cancel toast before it goes out.
   const UNDO_MS = 5000;
   const scheduleSend = () => {
+    if (
+      working ||
+      sendTimerRef.current ||
+      !draftSession?.beginOperation("send")
+    )
+      return;
     setSending(true);
     const timer = setTimeout(() => {
       sendTimerRef.current = null;
@@ -672,6 +719,7 @@ export function Composer({
           clearTimeout(timer);
           sendTimerRef.current = null;
           setSending(false);
+          draftSession.endOperation();
         },
       },
     });
@@ -694,7 +742,7 @@ export function Composer({
   const blocked =
     !recipientsValid || !ccValid || !bccValid || unfilledFields > 0;
   const send = () => {
-    if (!from || sending) return;
+    if (!from || working) return;
     if (blocked) {
       setTriedSend(true);
       flashFirstUnfilledField();
@@ -739,12 +787,15 @@ export function Composer({
       <section
         ref={sectionRef}
         aria-label="New message"
+        inert={working}
         onKeyDown={(event) => {
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
             event.preventDefault();
+            event.stopPropagation();
             void send();
           }
           if (event.key === "Escape" && !sending) {
+            event.stopPropagation();
             if (confirmOpen) setConfirmOpen(false);
             else close();
           }
@@ -795,7 +846,15 @@ export function Composer({
           <FieldLabel>From</FieldLabel>
           {from ? (
             <DropdownMenu>
-              <DropdownMenuTrigger className="inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-[7px] border bg-card px-2.5 py-1 hover:bg-muted">
+              <DropdownMenuTrigger
+                disabled={senderLocked}
+                title={
+                  senderLocked
+                    ? "Saved drafts keep their sending account"
+                    : "Choose sending account"
+                }
+                className="inline-flex min-w-0 cursor-pointer items-center gap-2 rounded-[7px] border bg-card px-2.5 py-1 hover:bg-muted disabled:cursor-default"
+              >
                 <AccountDot
                   colorIndex={accounts.findIndex(
                     (a) => a.accountId === from.accountId,
@@ -815,7 +874,10 @@ export function Composer({
                   <DropdownMenuItem
                     key={account.accountId}
                     onClick={() =>
-                      onContentChange({ fromId: account.accountId })
+                      onContentChange({
+                        fromId: account.accountId,
+                        draftSession: undefined,
+                      })
                     }
                   >
                     <AccountDot
@@ -839,7 +901,9 @@ export function Composer({
             </DropdownMenu>
           ) : (
             <span className="text-xs text-muted-foreground">
-              No sendable account linked
+              {fromId
+                ? "Sending account disconnected — reconnect to continue"
+                : "No sendable account linked"}
             </span>
           )}
         </div>
@@ -944,29 +1008,6 @@ export function Composer({
             className="min-w-0 flex-1 bg-transparent text-[13.5px] outline-none placeholder:text-muted-foreground/60"
           />
         </div>
-
-        {recovered && (
-          <div className="flex items-center gap-2.5 border-b bg-label-yellow/[0.07] px-3.5 py-2 text-[12.5px]">
-            <History className="size-3.5 shrink-0 text-label-yellow" />
-            <span className="min-w-0 flex-1 text-foreground">
-              Unsaved draft recovered from a previous session.
-            </span>
-            <button
-              type="button"
-              onClick={restoreBuffer}
-              className="shrink-0 font-medium text-primary hover:underline"
-            >
-              Restore
-            </button>
-            <button
-              type="button"
-              onClick={dismissRecovery}
-              className="shrink-0 text-muted-foreground hover:text-foreground"
-            >
-              Dismiss
-            </button>
-          </div>
-        )}
 
         <div
           className={cn(
@@ -1106,7 +1147,7 @@ export function Composer({
           <Button
             size="sm"
             className="shrink-0"
-            disabled={!from || sending || !hasContent}
+            disabled={!from || working || !hasContent}
             onClick={() => send()}
           >
             <SendIcon data-icon="inline-start" />
@@ -1118,7 +1159,11 @@ export function Composer({
           </KbdGroup>
 
           <div className="flex min-w-0 flex-1 items-center">
-            {error ? (
+            {operation === "attachments" ? (
+              <span role="status" className="text-[12px] text-muted-foreground">
+                Preparing attachments…
+              </span>
+            ) : error ? (
               <span className="truncate text-[12px] text-label-red">
                 {error}
               </span>

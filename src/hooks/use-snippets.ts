@@ -100,11 +100,12 @@ export async function deleteSnippet(id: string): Promise<void> {
     demoSnippets = demoSnippets.filter((s) => s.id !== id);
     return;
   }
-  await fetch("/api/snippets", {
+  const response = await fetch("/api/snippets", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ op: "delete", id }),
   });
+  if (!response.ok) throw new Error("Could not delete snippet. Try again.");
 }
 
 export function useSnippetMap(

@@ -12,6 +12,8 @@ import {
   FlaskConical,
   GitPullRequest,
   Inbox,
+  MailOpen,
+  Star,
   Laptop,
   LayoutGrid,
   LogOut,
@@ -149,6 +151,16 @@ export function CommandMenu({
       heading: "Actions",
       entries: [
         {
+          label: "Unified mailbox view",
+          icon: <Rows3 />,
+          action: () => updateSettings({ mailView: "unified" }),
+        },
+        {
+          label: "Board mailbox view",
+          icon: <LayoutGrid />,
+          action: () => updateSettings({ mailView: "board" }),
+        },
+        {
           label: "Compose",
           icon: <PenLine />,
           action: onCompose,
@@ -171,10 +183,20 @@ export function CommandMenu({
       heading: "Go to",
       entries: [
         {
-          label: "Inbox",
+          label: "All inboxes",
           icon: <Inbox />,
           action: () => onGoFolder("inbox"),
           shortcut: "G I",
+        },
+        {
+          label: "Unread",
+          icon: <MailOpen />,
+          action: () => onGoFolder("unread"),
+        },
+        {
+          label: "Starred",
+          icon: <Star />,
+          action: () => onGoFolder("starred"),
         },
         {
           label: "Labeled",
@@ -211,13 +233,11 @@ export function CommandMenu({
     {
       heading: "Layout",
       entries: [
-        ...workspaces.map(
-          (ws): CommandEntry => ({
-            label: `Open workspace: ${ws.name}`,
-            icon: <LayoutGrid />,
-            action: () => applyTileLayout(ws.tree),
-          }),
-        ),
+        ...workspaces.map((ws): CommandEntry => ({
+          label: `Open workspace: ${ws.name}`,
+          icon: <LayoutGrid />,
+          action: () => applyTileLayout(ws.tree),
+        })),
         {
           label: "Save board as workspace…",
           icon: <SaveIcon />,

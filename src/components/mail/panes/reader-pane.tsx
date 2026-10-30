@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArchiveIcon,
   BracesIcon,
@@ -13,7 +13,6 @@ import {
   MoreHorizontalIcon,
   ReplyAllIcon,
   ReplyIcon,
-  SendIcon,
   StarIcon,
   Trash2Icon,
   XIcon,
@@ -27,8 +26,8 @@ import {
   accountsQueryKey,
   actOnEmail,
   emailsQueryKey,
+  invalidateMailQueries,
   markEmailsRead,
-  sendNewEmail,
   useFullEmailQuery,
   useRawEmailQuery,
   useThreadQuery,
@@ -37,14 +36,6 @@ import {
   type MessageAction,
 } from "@/lib/mail-queries";
 import { MARK_READ_MS, useSettings } from "@/hooks/use-settings";
-import { useSnippetMap } from "@/hooks/use-snippets";
-import {
-  appendSignature,
-  appendSignatureHtml,
-  resolveAccountSignature,
-  useGmailSignatureQuery,
-  useSignaturesQuery,
-} from "@/hooks/use-signatures";
 import { useTileDrag } from "@/components/tile-board";
 import { toast } from "sonner";
 import {
@@ -52,13 +43,12 @@ import {
   TagPicker,
   useTagActions,
 } from "@/components/mail/tag-picker";
-import { Button } from "@/components/ui/button";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { cn } from "@/lib/utils";
 import { useAccountColor } from "@/components/shell/account-dot";
-import { HtmlBody } from "@/components/mail/html-body";
 import { RawView } from "@/components/mail/raw-view";
-import { RichTextEditor } from "@/components/editor/rich-text-editor";
+import { fetchDraftAttachments } from "@/components/editor/composer-attachments";
+import { replyRecipients, replyTarget } from "@/lib/email/reply";
 import { Hint } from "@/components/ui/tooltip";
 import { ErrorState } from "@/components/mail/thread-list-states";
 import {
@@ -72,8 +62,10 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useTiles } from "../tiles-context";
 import { BAR_ICON, BAR_PRIMARY, BAR_SEC } from "../pane-chrome";
-import { parseAddress, quotedReplyHtml, splitAddresses } from "../email-html";
+import { htmlToPlainText, parseAddress, quotedReplyHtml } from "../email-html";
 import { ThreadMessage } from "./reader-message";
+
+let activeReaderPaneId: string | null = null;
 
 export function ReaderPane({
   paneId,
@@ -105,34 +97,20 @@ export function ReaderPane({
     return () => observer.disconnect();
   }, []);
   const [busy, setBusy] = useState(false);
-  const [starred, setStarred] = useState(false);
-  const [replyOpen, setReplyOpen] = useState(false);
-  // Snippets / slash commands in the reply editor (fetched only while replying).
-  const replySnippets = useSnippetMap(replyOpen, accountId);
-  const [replyBody, setReplyBody] = useState("");
-  const [replySending, setReplySending] = useState(false);
-
-  // Signature: read-only block below the reply editor, appended to outgoing HTML on send unless removed.
-  const sigData = useSignaturesQuery(replyOpen, accountId).data;
-  const dbSig = resolveAccountSignature(sigData, accountId);
-  const replyEmail = accounts.find((a) => a.accountId === accountId)?.email;
-  const gmailSig =
-    useGmailSignatureQuery(accountId, replyEmail, replyOpen).data ?? "";
-  const useGmailSig = gmailSig.length > 0;
-  const [signatureSkipped, setSignatureSkipped] = useState(false);
+  const live = useRef(true);
+  const currentMessage = useRef("");
+  currentMessage.current = `${accountId}:${emailId}`;
   useEffect(() => {
-    if (replyOpen) setSignatureSkipped(false);
-  }, [replyOpen]);
-  const showSignature = (useGmailSig || dbSig !== null) && !signatureSkipped;
-  const replyOutgoingHtml = !showSignature
-    ? replyBody
-    : useGmailSig
-      ? appendSignatureHtml(replyBody, gmailSig)
-      : dbSig
-        ? appendSignature(replyBody, dbSig.body)
-        : replyBody;
-  const [replySent, setReplySent] = useState(false);
-  const replyRef = useRef<HTMLDivElement>(null);
+    live.current = true;
+    return () => {
+      live.current = false;
+    };
+  }, []);
+  const [starred, setStarred] = useState(false);
+  const replyEmail = accounts.find((a) => a.accountId === accountId)?.email;
+  const [pendingAction, setPendingAction] = useState<
+    "reply" | "all" | "forward" | null
+  >(null);
 
   const fullQuery = useFullEmailQuery(accountId, emailId);
   const rawQuery = useRawEmailQuery(accountId, emailId, raw);
@@ -146,9 +124,11 @@ export function ReaderPane({
 
   const threadQuery = useThreadQuery(accountId, email?.threadId);
   const thread = threadQuery.data;
-  const messages = thread && thread.length > 0 ? thread : email ? [email] : [];
-  const lastMessage = messages[messages.length - 1];
-  const replySender = lastMessage ? parseAddress(lastMessage.from) : sender;
+  const messages = useMemo(
+    () => (thread && thread.length > 0 ? thread : email ? [email] : []),
+    [thread, email],
+  );
+  const target = replyTarget(messages, replyEmail ?? "");
 
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const toggleExpand = (id: string) =>
@@ -164,12 +144,11 @@ export function ReaderPane({
     () => setStarred(email?.starred ?? false),
     [email?.id, email?.starred],
   );
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset the reply box whenever the open message changes (email.id is the trigger).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: changing the selected message activates this pane and clears the previous message's intent.
   useEffect(() => {
-    setReplyOpen(false);
-    setReplyBody("");
-    setReplySent(false);
-  }, [email?.id]);
+    activeReaderPaneId = paneId;
+    setPendingAction(null);
+  }, [paneId, accountId, emailId]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: recompute the expanded set when the thread/message changes; emailId is read fresh.
   useEffect(() => {
     if (messages.length === 0) return;
@@ -185,139 +164,135 @@ export function ReaderPane({
     const delay = MARK_READ_MS[markRead];
     if (delay === null) return;
     const id = email.id;
-    const timer = setTimeout(() => {
-      markEmailsRead(accountId, [id]);
-      queryClient.setQueryData<EmailsData>(
-        emailsQueryKey(accountId, folder),
-        (current) =>
-          current && {
-            ...current,
-            pages: current.pages.map((page) => ({
-              ...page,
-              emails: page.emails.map((e) =>
-                e.id === id ? { ...e, unread: false } : e,
-              ),
-            })),
-          },
-      );
-      queryClient.setQueryData<FullEmail>(["email", accountId, id], (e) =>
-        e ? { ...e, unread: false } : e,
-      );
-      queryClient.invalidateQueries({ queryKey: accountsQueryKey });
+    const timer = setTimeout(async () => {
+      try {
+        await markEmailsRead(accountId, [id]);
+        queryClient.setQueryData<EmailsData>(
+          emailsQueryKey(accountId, folder),
+          (current) =>
+            current && {
+              ...current,
+              pages: current.pages.map((page) => ({
+                ...page,
+                emails: page.emails.map((e) =>
+                  e.id === id ? { ...e, unread: false } : e,
+                ),
+              })),
+            },
+        );
+        queryClient.setQueryData<FullEmail>(["email", accountId, id], (e) =>
+          e ? { ...e, unread: false } : e,
+        );
+        invalidateMailQueries(queryClient, accountId);
+      } catch (err) {
+        toast.error("Could not mark message as read", {
+          description: err instanceof Error ? err.message : String(err),
+        });
+      }
     }, delay);
     return () => clearTimeout(timer);
   }, [email?.id, email?.unread, markRead, accountId]);
 
-  const startReply = () => {
-    if (!email) return;
-    setReplySent(false);
-    setReplyOpen(true);
-    requestAnimationFrame(() =>
-      replyRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "nearest",
-      }),
-    );
-  };
-
-  // Reply-all on the latest message: To = sender + To recipients, Cc = original
-  // Cc (both minus our address and dupes). Opens the composer with threading headers.
-  const startReplyAll = () => {
-    const target = lastMessage;
-    if (!target) return;
-    const self = (
-      accounts.find((a) => a.accountId === accountId)?.email ?? ""
-    ).toLowerCase();
-    const seen = new Set<string>();
-    if (self) seen.add(self);
-    const dedupe = (addresses: string[]) =>
-      addresses.filter((address) => {
-        const key = address.toLowerCase();
-        if (!key || seen.has(key)) return false;
-        seen.add(key);
-        return true;
-      });
-    const to = dedupe([
-      parseAddress(target.from).address,
-      ...splitAddresses(target.to ?? ""),
-    ]);
-    const cc = dedupe(splitAddresses(target.cc ?? ""));
-    const subject = /^re:/i.test(target.subject)
-      ? target.subject
-      : `Re: ${target.subject}`;
-    window.dispatchEvent(
-      new CustomEvent("open-compose", {
-        detail: {
-          accountId,
-          to: to.join(", "),
-          cc: cc.join(", "),
-          subject,
-          html: quotedReplyHtml(target),
-          reply: {
-            inReplyTo: target.messageId || undefined,
-            references:
-              [target.references, target.messageId].filter(Boolean).join(" ") ||
-              undefined,
-            threadId: target.threadId || undefined,
+  // Replies share the full composer, including its draft, signature and undo-send lifecycle.
+  const openReply = useCallback(
+    (all: boolean) => {
+      if (!email || threadQuery.isPending) {
+        setPendingAction(all ? "all" : "reply");
+        return;
+      }
+      if (!target) {
+        toast.error("Open the draft to continue editing it.");
+        return;
+      }
+      if (!replyEmail) {
+        toast.error("Reconnect this account before replying.");
+        return;
+      }
+      const { to, cc } = replyRecipients(target, replyEmail, all);
+      if (to.length === 0) {
+        toast.error("This message has no reply recipient.");
+        return;
+      }
+      const subject = /^re:/i.test(target.subject)
+        ? target.subject
+        : `Re: ${target.subject}`;
+      window.dispatchEvent(
+        new CustomEvent("open-compose", {
+          detail: {
+            accountId,
+            to: to.join(", "),
+            cc: cc.join(", "),
+            subject,
+            html: quotedReplyHtml({
+              ...target,
+              body: target.body || htmlToPlainText(target.bodyHtml ?? ""),
+            }),
+            reply: {
+              inReplyTo: target.messageId || undefined,
+              references:
+                [target.references, target.messageId]
+                  .filter(Boolean)
+                  .join(" ") || undefined,
+              threadId: target.threadId || undefined,
+            },
           },
-        },
-      }),
-    );
-  };
+        }),
+      );
+    },
+    [email, threadQuery.isPending, target, replyEmail, accountId],
+  );
+  const startReply = useCallback(() => openReply(false), [openReply]);
+  const startReplyAll = useCallback(() => openReply(true), [openReply]);
 
   // Build a forward draft and open the composer. Used by the footer button and the start-forward event.
-  const startForward = () => {
-    if (!email) return;
-    const fwdBody = `\n\n---- Forwarded message ----\nFrom: ${sender?.name ?? ""} <${sender?.address ?? ""}>\nDate: ${email.date}\nSubject: ${email.subject}\n\n${email.body || email.snippet || ""}`;
-    window.dispatchEvent(
-      new CustomEvent("open-compose", {
-        detail: { to: "", subject: `Fwd: ${email.subject}`, body: fwdBody },
-      }),
-    );
-  };
-
-  const sendReply = async () => {
-    const target = lastMessage;
-    if (!target || !replySender || replySending || !replyBody.trim()) return;
-    setReplySending(true);
-    const sandbox = isTestAccount(accountId);
-    try {
-      await sendNewEmail({
-        accountId,
-        to: replySender.address,
-        subject: /^re:/i.test(target.subject)
-          ? target.subject
-          : `Re: ${target.subject}`,
-        body: "",
-        html: replyOutgoingHtml,
-        inReplyTo: target.messageId || undefined,
-        references:
-          [target.references, target.messageId].filter(Boolean).join(" ") ||
-          undefined,
-        threadId: target.threadId || undefined,
-      });
-      setReplyOpen(false);
-      setReplyBody("");
-      setReplySent(true);
-      if (sandbox) {
-        toast("Demo: reply not sent", {
-          description: "This is a sandbox. Nothing actually left BetterBox.",
-        });
-      } else {
-        toast.success("Reply sent", {
-          description: `To ${replySender.address}`,
-        });
-      }
-      queryClient.invalidateQueries({
-        queryKey: ["thread", accountId, target.threadId],
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      toast.error("Couldn’t send reply", { description: message });
-    } finally {
-      setReplySending(false);
+  const startForward = useCallback(async () => {
+    if (!email) {
+      setPendingAction("forward");
+      return;
     }
-  };
+    if (busy) return;
+    if (!replyEmail) {
+      toast.error("Reconnect this account before forwarding.");
+      return;
+    }
+    const fwdBody = `\n\n---- Forwarded message ----\nFrom: ${sender?.name ?? ""} <${sender?.address ?? ""}>\nDate: ${email.date}\nTo: ${email.to}\nSubject: ${email.subject}\n\n${email.body || htmlToPlainText(email.bodyHtml ?? "") || email.snippet || ""}`;
+    setBusy(true);
+    const forwardingMessage = currentMessage.current;
+    try {
+      const attachments = await fetchDraftAttachments(accountId, {
+        id: email.id,
+        attachments: email.attachments,
+      });
+      if (!live.current || currentMessage.current !== forwardingMessage) return;
+      window.dispatchEvent(
+        new CustomEvent("open-compose", {
+          detail: {
+            accountId,
+            to: "",
+            subject: /^fwd:/i.test(email.subject)
+              ? email.subject
+              : `Fwd: ${email.subject}`,
+            body: fwdBody,
+            attachments,
+          },
+        }),
+      );
+    } catch (err) {
+      if (!live.current || currentMessage.current !== forwardingMessage) return;
+      toast.error("Could not prepare forward", {
+        description: err instanceof Error ? err.message : String(err),
+      });
+    } finally {
+      setBusy(false);
+    }
+  }, [email, busy, replyEmail, sender?.name, sender?.address, accountId]);
+
+  useEffect(() => {
+    if (!pendingAction || !email || threadQuery.isPending) return;
+    setPendingAction(null);
+    if (pendingAction === "forward") void startForward();
+    else openReply(pendingAction === "all");
+  }, [pendingAction, email, threadQuery.isPending, startForward, openReply]);
 
   const runAction = async (action: MessageAction) => {
     if (!email || busy) return;
@@ -325,6 +300,7 @@ export function ReaderPane({
     const sandbox = isTestAccount(accountId);
     try {
       await actOnEmail(accountId, email.id, action);
+      invalidateMailQueries(queryClient, accountId);
       if (action === "star" || action === "unstar") {
         setStarred(action === "star");
         setBusy(false);
@@ -342,7 +318,19 @@ export function ReaderPane({
           },
       );
       queryClient.invalidateQueries({ queryKey: accountsQueryKey });
-      const label = action === "archive" ? "Archived" : "Moved to trash";
+      const label =
+        (
+          {
+            archive: "Archived",
+            trash: "Moved to trash",
+            read: "Marked read",
+            unread: "Marked unread",
+            restore: "Restored to inbox",
+            spam: "Moved to spam",
+            unspam: "Removed from spam",
+            inbox: "Moved to inbox",
+          } as Partial<Record<MessageAction, string>>
+        )[action] ?? "Message updated";
       toast(sandbox ? `Demo: ${label.toLowerCase()} in sandbox only` : label);
       onClose();
     } catch (err) {
@@ -352,15 +340,15 @@ export function ReaderPane({
     }
   };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: rebind the reader key/event handlers only on the listed inputs; startReply/startForward close over current values.
   useEffect(() => {
     const typing = (target: EventTarget | null) =>
       target instanceof HTMLElement &&
       target.closest("input, textarea, [contenteditable='true']") !== null;
     const onKey = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || activeReaderPaneId !== paneId) return;
+      if (typing(event.target)) return;
       if (event.key === "Escape") {
-        if (replyOpen) setReplyOpen(false);
-        else onClose();
+        onClose();
         return;
       }
       if (typing(event.target) || event.metaKey || event.ctrlKey) return;
@@ -384,8 +372,7 @@ export function ReaderPane({
 
     const onStartReply = (e: Event) => {
       const detail = (e as CustomEvent)?.detail as
-        | { accountId?: string; emailId?: string }
-        | undefined;
+        { accountId?: string; emailId?: string } | undefined;
       if (!detail) return;
       if (detail.accountId !== accountId) return;
       if (detail.emailId && detail.emailId !== emailId) return;
@@ -393,8 +380,7 @@ export function ReaderPane({
     };
     const onStartForward = (e: Event) => {
       const detail = (e as CustomEvent)?.detail as
-        | { accountId?: string; emailId?: string }
-        | undefined;
+        { accountId?: string; emailId?: string } | undefined;
       if (!detail) return;
       if (detail.accountId !== accountId) return;
       if (detail.emailId && detail.emailId !== emailId) return;
@@ -409,10 +395,19 @@ export function ReaderPane({
       window.removeEventListener("start-reply", onStartReply);
       window.removeEventListener("start-forward", onStartForward);
     };
-  }, [onClose, email, sender, replyOpen, emailId, accountId]);
+  }, [onClose, emailId, accountId, paneId, startReply, startForward]);
 
   return (
-    <div ref={paneRef} className="flex h-full min-w-0 flex-col bg-background">
+    <div
+      ref={paneRef}
+      onPointerDownCapture={() => {
+        activeReaderPaneId = paneId;
+      }}
+      onFocusCapture={() => {
+        activeReaderPaneId = paneId;
+      }}
+      className="flex h-full min-w-0 flex-col bg-background"
+    >
       <div
         onPointerDown={(event) => beginHeaderDrag(event, paneId)}
         className="flex h-9 shrink-0 items-center gap-[9px] border-b px-2.5 select-none md:cursor-grab md:touch-none md:active:cursor-grabbing"
@@ -540,93 +535,6 @@ export function ReaderPane({
                   narrow={narrow}
                 />
               ))}
-            </div>
-
-            <div ref={replyRef}>
-              {replyOpen ? (
-                <div className="mt-6 overflow-hidden rounded-xl border border-input bg-background shadow-sm">
-                  <div className="flex flex-wrap items-center gap-1.5 border-b px-3.5 py-2.5 text-[12.5px] text-muted-foreground">
-                    <ReplyIcon className="size-3.5 shrink-0" />
-                    Reply to{" "}
-                    <span className="font-medium text-foreground">
-                      {(replySender ?? sender).name}
-                    </span>
-                    <span className="truncate font-mono text-[11px] text-muted-foreground/80">
-                      &lt;{(replySender ?? sender).address}&gt;
-                    </span>
-                  </div>
-                  {/* Transparent, border-0 editor so the body shares the card with header/signature/footer. */}
-                  <RichTextEditor
-                    value={replyBody}
-                    onChange={setReplyBody}
-                    onSubmit={() => void sendReply()}
-                    snippets={replySnippets}
-                    placeholder="Write your reply…"
-                    autoFocus
-                    minHeight={140}
-                    className="rounded-none border-0 bg-transparent"
-                  />
-                  {showSignature && (
-                    <div className="border-t px-3.5 py-2">
-                      <div className="mb-1 flex items-center justify-between">
-                        <span className="font-mono text-[10px] tracking-[0.5px] text-muted-foreground/60 uppercase">
-                          Signature
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => setSignatureSkipped(true)}
-                          aria-label="Remove signature"
-                          className="inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                          <XIcon className="size-3.5" />
-                        </button>
-                      </div>
-                      {useGmailSig ? (
-                        <div className="overflow-hidden rounded-md border">
-                          <HtmlBody html={gmailSig} accountId={accountId} />
-                        </div>
-                      ) : (
-                        <div className="text-[13px] leading-[1.6] whitespace-pre-line text-muted-foreground">
-                          {dbSig?.body}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <footer className="flex items-center gap-3 border-t px-3.5 py-[11px]">
-                    <Button
-                      size="sm"
-                      disabled={replySending || !replyBody.trim()}
-                      onClick={() => void sendReply()}
-                    >
-                      <SendIcon data-icon="inline-start" />
-                      {replySending ? "Sending…" : "Send reply"}
-                    </Button>
-                    <KbdGroup className="hidden text-muted-foreground/45 sm:inline-flex">
-                      <Kbd>⌘</Kbd>
-                      <Kbd>↵</Kbd>
-                    </KbdGroup>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="ml-auto"
-                      onClick={() => setReplyOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </footer>
-                </div>
-              ) : replySent ? (
-                <button
-                  type="button"
-                  onClick={startReply}
-                  className="mt-6 flex w-full items-center gap-2 rounded-lg border border-accent-2-focus/40 bg-accent-2/10 px-3 py-2 text-left text-[12.5px] text-accent-2-hover hover:bg-accent-2/15"
-                >
-                  <CheckIcon className="size-3.5" />
-                  {isTestAccount(accountId)
-                    ? "Demo: nothing was actually sent. Reply again?"
-                    : "Reply sent. It’ll appear in this thread. Reply again?"}
-                </button>
-              ) : null}
             </div>
           </article>
         )}

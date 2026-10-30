@@ -22,6 +22,7 @@ import {
   emailsQueryKey,
   flattenEmails,
   useEmailsQuery,
+  invalidateMailQueries,
 } from "@/lib/mail-queries";
 import { useSettings } from "@/hooks/use-settings";
 import { FOLDERS, type Folder } from "@/lib/folders";
@@ -269,7 +270,7 @@ export function PaneHeader({
   );
 }
 
-/** Drafts-only: delete every draft in this account, behind a confirm dialog. */
+/** Drafts-only: move the loaded selection to Trash, behind a confirm dialog. */
 function DeleteAllDraftsButton({
   account,
   className,
@@ -290,17 +291,17 @@ function DeleteAllDraftsButton({
     const drafts = draftsList();
     setBusy(true);
     try {
-      await Promise.all(
-        drafts.map((d) => deleteDraft(account.accountId, d.id)),
-      );
-      queryClient.invalidateQueries({
-        queryKey: ["emails", account.accountId],
-      });
+      for (let offset = 0; offset < drafts.length; offset += 3) {
+        await Promise.all(drafts.slice(offset, offset + 3).map((draft) => deleteDraft(account.accountId, draft.id)));
+      }
       toast.success(
-        `Deleted ${drafts.length} draft${drafts.length === 1 ? "" : "s"}`,
+        `Moved ${drafts.length} loaded draft${drafts.length === 1 ? "" : "s"} to Trash`,
       );
       setOpen(false);
+    } catch {
+      toast.error("Some drafts could not be moved. The list has been refreshed; retry the remaining drafts.");
     } finally {
+      invalidateMailQueries(queryClient, account.accountId);
       setBusy(false);
     }
   };
@@ -309,7 +310,7 @@ function DeleteAllDraftsButton({
 
   return (
     <>
-      <Hint label="Delete all drafts">
+      <Hint label="Move loaded drafts to Trash">
         <button
           type="button"
           onClick={() => setOpen(true)}
@@ -321,12 +322,12 @@ function DeleteAllDraftsButton({
       <Dialog open={open} onOpenChange={(o) => !o && setOpen(false)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Delete all drafts?</DialogTitle>
+            <DialogTitle>Move loaded drafts to Trash?</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-muted-foreground">
             {count === 0
               ? "There are no drafts to delete."
-              : `Permanently delete ${count} draft${count === 1 ? "" : "s"} in ${account.email || account.accountId}. This can’t be undone.`}
+              : `Move these ${count} loaded draft${count === 1 ? "" : "s"} in ${account.email || account.accountId} to Trash. Older drafts that have not loaded are unchanged.`}
           </p>
           <DialogFooter>
             <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
@@ -338,7 +339,7 @@ function DeleteAllDraftsButton({
               onClick={() => void onConfirm()}
               className="bg-label-red text-white hover:bg-label-red/90"
             >
-              {busy ? "Deleting…" : "Delete all"}
+              {busy ? "Moving…" : "Move loaded drafts"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -387,7 +388,7 @@ export function PaneBody({
       ref={scrollRef}
       className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto"
     >
-      {folder === "labeled" ? (
+      {folder === "labeled" && !searching ? (
         <LabeledView
           accountId={account.accountId}
           dotIndex={dotIndex}

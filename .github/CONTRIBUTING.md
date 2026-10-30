@@ -4,7 +4,9 @@ Thanks for your interest in improving BetterBox. Issues and pull requests are we
 
 ## Getting set up
 
-See the [Quick start](../README.md#quick-start) in the README — `bun install`, add a `.env`, `bun run db:push`, `bun run dev`.
+See [Local development](../README.md#local-development) in the README. Install
+with `bun install --frozen-lockfile`, copy `.env.example` to `.dev.vars`, configure
+local credentials, apply `bun run db:migrate:local`, then `bun run dev`.
 
 ## Workflow
 
@@ -15,11 +17,17 @@ See the [Quick start](../README.md#quick-start) in the README — `bun install`,
 
    ```bash
    bun run typecheck
-   bun run format
    bun run lint
+   bun test
+   bun run build
+   bun run test:runtime
    ```
 
-5. Open a PR with a clear title and a short description of what changed and why.
+   Format changed source files with Prettier. Runtime checks require Node 24;
+   they use isolated workerd/D1 fixtures and do not contact live Gmail.
+
+5. Open a PR with a clear title, description and validation results. Distinguish
+   local/mocked checks from live Google and deployed Cloudflare acceptance.
 
 ## Reporting bugs
 

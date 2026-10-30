@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 
 import { auth } from "@/lib/auth/auth";
+import { hasAuthConfiguration } from "@/lib/runtime.server";
 
 /**
  * Server-resolved session for route guards. Called from _app's beforeLoad so SSR
@@ -12,8 +13,14 @@ import { auth } from "@/lib/auth/auth";
 export const fetchSession = createServerFn({ method: "GET" }).handler(
   async () => {
     const request = getRequest();
-    const session = await auth.api.getSession({ headers: request.headers });
-    return session ?? null;
+    if (!hasAuthConfiguration()) return null;
+    try {
+      const session = await auth.api.getSession({ headers: request.headers });
+      return session ?? null;
+    } catch (error) {
+      if (error && typeof error === "object" && "statusCode" in error && [401,403].includes(Number(error.statusCode))) return null;
+      throw error;
+    }
   },
 );
 
@@ -25,9 +32,5 @@ export type ServerSession = Awaited<ReturnType<typeof fetchSession>>;
  * button that throws an opaque 500 mid-flow.
  */
 export const fetchGoogleConfigured = createServerFn({ method: "GET" }).handler(
-  () =>
-    Boolean(
-      process.env.GOOGLE_CLIENT_ID?.trim() &&
-      process.env.GOOGLE_CLIENT_SECRET?.trim(),
-    ),
+  () => hasAuthConfiguration(),
 );

@@ -3,8 +3,6 @@ import { HeadContent, Scripts, createRootRoute } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SpeedInsights } from "@vercel/speed-insights/react";
-import { Analytics } from "@vercel/analytics/react";
 
 import { ThemeProvider } from "@/components/shell/theme-provider";
 import appCss from "../styles.css?url";
@@ -53,7 +51,7 @@ export const Route = createRootRoute({
 
 /** Friendly fallback for any otherwise-unhandled error, so the app never shows
  *  a raw 500 / JSON error dump (e.g. a misconfigured self-host instance). */
-function RootError({ error }: { error: Error }) {
+function RootError() {
   return (
     <main className="flex min-h-svh w-full items-center justify-center bg-canvas px-6 py-8 text-ink">
       <div className="w-full max-w-110 rounded-[12px] border border-hairline bg-surface-1 px-7 py-7 text-center">
@@ -67,11 +65,6 @@ function RootError({ error }: { error: Error }) {
           </code>{" "}
           and the server logs.
         </p>
-        {error?.message && (
-          <pre className="mt-4 overflow-x-auto rounded bg-canvas px-3 py-2 text-left font-mono text-[11px] leading-[1.6] text-ink-tertiary">
-            {error.message}
-          </pre>
-        )}
         <button
           type="button"
           onClick={() => window.location.reload()}
@@ -90,7 +83,7 @@ function RootDocument({ children }: { children: ReactNode }) {
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { staleTime: 60_000, retry: 1, refetchOnWindowFocus: false },
+          queries: { staleTime: 60_000, retry: 1, refetchOnWindowFocus: true },
         },
       }),
   );
@@ -108,8 +101,6 @@ function RootDocument({ children }: { children: ReactNode }) {
                 style={{ "--sidebar-width": "18rem" } as CSSProperties}
               >
                 {children}
-                <SpeedInsights />
-                <Analytics />
               </SidebarProvider>
             </TooltipProvider>
           </ThemeProvider>

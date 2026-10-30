@@ -9,40 +9,41 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as SignInRouteImport } from './routes/sign-in'
-import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as AppRouteImport } from './routes/_app'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
-import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
-import { Route as ApiSnippetsRouteImport } from './routes/api/snippets'
-import { Route as ApiSignaturesRouteImport } from './routes/api/signatures'
-import { Route as ApiSendRouteImport } from './routes/api/send'
-import { Route as ApiPullRequestsRouteImport } from './routes/api/pull-requests'
-import { Route as ApiMessageRouteImport } from './routes/api/message'
-import { Route as ApiLabelsRouteImport } from './routes/api/labels'
-import { Route as ApiImageProxyRouteImport } from './routes/api/image-proxy'
-import { Route as ApiGmailSignatureRouteImport } from './routes/api/gmail-signature'
-import { Route as ApiGithubIssuesRouteImport } from './routes/api/github-issues'
-import { Route as ApiEmailsRouteImport } from './routes/api/emails'
-import { Route as ApiDraftRouteImport } from './routes/api/draft'
-import { Route as ApiContactsRouteImport } from './routes/api/contacts'
-import { Route as ApiAccountsRouteImport } from './routes/api/accounts'
-import { Route as AppWebhooksRouteImport } from './routes/_app/webhooks'
-import { Route as AppTrashRouteImport } from './routes/_app/trash'
-import { Route as AppSpamRouteImport } from './routes/_app/spam'
-import { Route as AppSentRouteImport } from './routes/_app/sent'
-import { Route as AppPullRequestsRouteImport } from './routes/_app/pull-requests'
-import { Route as AppLabeledRouteImport } from './routes/_app/labeled'
-import { Route as AppIssuesRouteImport } from './routes/_app/issues'
-import { Route as AppDraftsRouteImport } from './routes/_app/drafts'
-import { Route as AppArchivedRouteImport } from './routes/_app/archived'
 import { Route as AppApiRouteImport } from './routes/_app/api'
-import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as AppArchivedRouteImport } from './routes/_app/archived'
+import { Route as AppDraftsRouteImport } from './routes/_app/drafts'
+import { Route as AppIssuesRouteImport } from './routes/_app/issues'
+import { Route as AppLabeledRouteImport } from './routes/_app/labeled'
+import { Route as AppPullRequestsRouteImport } from './routes/_app/pull-requests'
+import { Route as AppSentRouteImport } from './routes/_app/sent'
+import { Route as AppSpamRouteImport } from './routes/_app/spam'
+import { Route as AppStarredRouteImport } from './routes/_app/starred'
+import { Route as AppTrashRouteImport } from './routes/_app/trash'
+import { Route as AppUnreadRouteImport } from './routes/_app/unread'
+import { Route as AppWebhooksRouteImport } from './routes/_app/webhooks'
+import { Route as ApiAccountsRouteImport } from './routes/api/accounts'
+import { Route as ApiContactsRouteImport } from './routes/api/contacts'
+import { Route as ApiDraftRouteImport } from './routes/api/draft'
+import { Route as ApiEmailsRouteImport } from './routes/api/emails'
+import { Route as ApiGithubIssuesRouteImport } from './routes/api/github-issues'
+import { Route as ApiGmailSignatureRouteImport } from './routes/api/gmail-signature'
+import { Route as ApiImageProxyRouteImport } from './routes/api/image-proxy'
+import { Route as ApiLabelsRouteImport } from './routes/api/labels'
+import { Route as ApiMessageRouteImport } from './routes/api/message'
+import { Route as ApiPullRequestsRouteImport } from './routes/api/pull-requests'
+import { Route as ApiSendRouteImport } from './routes/api/send'
+import { Route as ApiSignaturesRouteImport } from './routes/api/signatures'
+import { Route as ApiSnippetsRouteImport } from './routes/api/snippets'
+import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as AppEmailIdRouteImport } from './routes/_app/email.$id'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
-const SignInRoute = SignInRouteImport.update({
-  id: '/sign-in',
-  path: '/sign-in',
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -50,8 +51,9 @@ const PrivacyRoute = PrivacyRouteImport.update({
   path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AppRoute = AppRouteImport.update({
-  id: '/_app',
+const SignInRoute = SignInRouteImport.update({
+  id: '/sign-in',
+  path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -59,114 +61,9 @@ const AppIndexRoute = AppIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRoute,
 } as any)
-const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
-  id: '/api/waitlist',
-  path: '/api/waitlist',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiSnippetsRoute = ApiSnippetsRouteImport.update({
-  id: '/api/snippets',
-  path: '/api/snippets',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiSignaturesRoute = ApiSignaturesRouteImport.update({
-  id: '/api/signatures',
-  path: '/api/signatures',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiSendRoute = ApiSendRouteImport.update({
-  id: '/api/send',
-  path: '/api/send',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiPullRequestsRoute = ApiPullRequestsRouteImport.update({
-  id: '/api/pull-requests',
-  path: '/api/pull-requests',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiMessageRoute = ApiMessageRouteImport.update({
-  id: '/api/message',
-  path: '/api/message',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiLabelsRoute = ApiLabelsRouteImport.update({
-  id: '/api/labels',
-  path: '/api/labels',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiImageProxyRoute = ApiImageProxyRouteImport.update({
-  id: '/api/image-proxy',
-  path: '/api/image-proxy',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiGmailSignatureRoute = ApiGmailSignatureRouteImport.update({
-  id: '/api/gmail-signature',
-  path: '/api/gmail-signature',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiGithubIssuesRoute = ApiGithubIssuesRouteImport.update({
-  id: '/api/github-issues',
-  path: '/api/github-issues',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiEmailsRoute = ApiEmailsRouteImport.update({
-  id: '/api/emails',
-  path: '/api/emails',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiDraftRoute = ApiDraftRouteImport.update({
-  id: '/api/draft',
-  path: '/api/draft',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiContactsRoute = ApiContactsRouteImport.update({
-  id: '/api/contacts',
-  path: '/api/contacts',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ApiAccountsRoute = ApiAccountsRouteImport.update({
-  id: '/api/accounts',
-  path: '/api/accounts',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AppWebhooksRoute = AppWebhooksRouteImport.update({
-  id: '/webhooks',
-  path: '/webhooks',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppTrashRoute = AppTrashRouteImport.update({
-  id: '/trash',
-  path: '/trash',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSpamRoute = AppSpamRouteImport.update({
-  id: '/spam',
-  path: '/spam',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppSentRoute = AppSentRouteImport.update({
-  id: '/sent',
-  path: '/sent',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppPullRequestsRoute = AppPullRequestsRouteImport.update({
-  id: '/pull-requests',
-  path: '/pull-requests',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppLabeledRoute = AppLabeledRouteImport.update({
-  id: '/labeled',
-  path: '/labeled',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppIssuesRoute = AppIssuesRouteImport.update({
-  id: '/issues',
-  path: '/issues',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppDraftsRoute = AppDraftsRouteImport.update({
-  id: '/drafts',
-  path: '/drafts',
+const AppApiRoute = AppApiRouteImport.update({
+  id: '/api',
+  path: '/api',
   getParentRoute: () => AppRoute,
 } as any)
 const AppArchivedRoute = AppArchivedRouteImport.update({
@@ -174,20 +71,135 @@ const AppArchivedRoute = AppArchivedRouteImport.update({
   path: '/archived',
   getParentRoute: () => AppRoute,
 } as any)
-const AppApiRoute = AppApiRouteImport.update({
-  id: '/api',
-  path: '/api',
+const AppDraftsRoute = AppDraftsRouteImport.update({
+  id: '/drafts',
+  path: '/drafts',
   getParentRoute: () => AppRoute,
 } as any)
-const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
+const AppIssuesRoute = AppIssuesRouteImport.update({
+  id: '/issues',
+  path: '/issues',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppLabeledRoute = AppLabeledRouteImport.update({
+  id: '/labeled',
+  path: '/labeled',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppPullRequestsRoute = AppPullRequestsRouteImport.update({
+  id: '/pull-requests',
+  path: '/pull-requests',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSentRoute = AppSentRouteImport.update({
+  id: '/sent',
+  path: '/sent',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSpamRoute = AppSpamRouteImport.update({
+  id: '/spam',
+  path: '/spam',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppStarredRoute = AppStarredRouteImport.update({
+  id: '/starred',
+  path: '/starred',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppTrashRoute = AppTrashRouteImport.update({
+  id: '/trash',
+  path: '/trash',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppUnreadRoute = AppUnreadRouteImport.update({
+  id: '/unread',
+  path: '/unread',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppWebhooksRoute = AppWebhooksRouteImport.update({
+  id: '/webhooks',
+  path: '/webhooks',
+  getParentRoute: () => AppRoute,
+} as any)
+const ApiAccountsRoute = ApiAccountsRouteImport.update({
+  id: '/api/accounts',
+  path: '/api/accounts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiContactsRoute = ApiContactsRouteImport.update({
+  id: '/api/contacts',
+  path: '/api/contacts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiDraftRoute = ApiDraftRouteImport.update({
+  id: '/api/draft',
+  path: '/api/draft',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiEmailsRoute = ApiEmailsRouteImport.update({
+  id: '/api/emails',
+  path: '/api/emails',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGithubIssuesRoute = ApiGithubIssuesRouteImport.update({
+  id: '/api/github-issues',
+  path: '/api/github-issues',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiGmailSignatureRoute = ApiGmailSignatureRouteImport.update({
+  id: '/api/gmail-signature',
+  path: '/api/gmail-signature',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiImageProxyRoute = ApiImageProxyRouteImport.update({
+  id: '/api/image-proxy',
+  path: '/api/image-proxy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLabelsRoute = ApiLabelsRouteImport.update({
+  id: '/api/labels',
+  path: '/api/labels',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMessageRoute = ApiMessageRouteImport.update({
+  id: '/api/message',
+  path: '/api/message',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPullRequestsRoute = ApiPullRequestsRouteImport.update({
+  id: '/api/pull-requests',
+  path: '/api/pull-requests',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSendRoute = ApiSendRouteImport.update({
+  id: '/api/send',
+  path: '/api/send',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSignaturesRoute = ApiSignaturesRouteImport.update({
+  id: '/api/signatures',
+  path: '/api/signatures',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSnippetsRoute = ApiSnippetsRouteImport.update({
+  id: '/api/snippets',
+  path: '/api/snippets',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiWaitlistRoute = ApiWaitlistRouteImport.update({
+  id: '/api/waitlist',
+  path: '/api/waitlist',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppEmailIdRoute = AppEmailIdRouteImport.update({
   id: '/email/$id',
   path: '/email/$id',
   getParentRoute: () => AppRoute,
+} as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
 } as any)
 
 export interface FileRoutesByFullPath {
@@ -202,7 +214,9 @@ export interface FileRoutesByFullPath {
   '/pull-requests': typeof AppPullRequestsRoute
   '/sent': typeof AppSentRoute
   '/spam': typeof AppSpamRoute
+  '/starred': typeof AppStarredRoute
   '/trash': typeof AppTrashRoute
+  '/unread': typeof AppUnreadRoute
   '/webhooks': typeof AppWebhooksRoute
   '/api/accounts': typeof ApiAccountsRoute
   '/api/contacts': typeof ApiContactsRoute
@@ -232,7 +246,9 @@ export interface FileRoutesByTo {
   '/pull-requests': typeof AppPullRequestsRoute
   '/sent': typeof AppSentRoute
   '/spam': typeof AppSpamRoute
+  '/starred': typeof AppStarredRoute
   '/trash': typeof AppTrashRoute
+  '/unread': typeof AppUnreadRoute
   '/webhooks': typeof AppWebhooksRoute
   '/api/accounts': typeof ApiAccountsRoute
   '/api/contacts': typeof ApiContactsRoute
@@ -265,7 +281,9 @@ export interface FileRoutesById {
   '/_app/pull-requests': typeof AppPullRequestsRoute
   '/_app/sent': typeof AppSentRoute
   '/_app/spam': typeof AppSpamRoute
+  '/_app/starred': typeof AppStarredRoute
   '/_app/trash': typeof AppTrashRoute
+  '/_app/unread': typeof AppUnreadRoute
   '/_app/webhooks': typeof AppWebhooksRoute
   '/api/accounts': typeof ApiAccountsRoute
   '/api/contacts': typeof ApiContactsRoute
@@ -299,7 +317,9 @@ export interface FileRouteTypes {
     | '/pull-requests'
     | '/sent'
     | '/spam'
+    | '/starred'
     | '/trash'
+    | '/unread'
     | '/webhooks'
     | '/api/accounts'
     | '/api/contacts'
@@ -329,7 +349,9 @@ export interface FileRouteTypes {
     | '/pull-requests'
     | '/sent'
     | '/spam'
+    | '/starred'
     | '/trash'
+    | '/unread'
     | '/webhooks'
     | '/api/accounts'
     | '/api/contacts'
@@ -361,7 +383,9 @@ export interface FileRouteTypes {
     | '/_app/pull-requests'
     | '/_app/sent'
     | '/_app/spam'
+    | '/_app/starred'
     | '/_app/trash'
+    | '/_app/unread'
     | '/_app/webhooks'
     | '/api/accounts'
     | '/api/contacts'
@@ -405,11 +429,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/sign-in': {
-      id: '/sign-in'
-      path: '/sign-in'
-      fullPath: '/sign-in'
-      preLoaderRoute: typeof SignInRouteImport
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -419,11 +443,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_app': {
-      id: '/_app'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AppRouteImport
+    '/sign-in': {
+      id: '/sign-in'
+      path: '/sign-in'
+      fullPath: '/sign-in'
+      preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -433,158 +457,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppIndexRouteImport
       parentRoute: typeof AppRoute
     }
-    '/api/waitlist': {
-      id: '/api/waitlist'
-      path: '/api/waitlist'
-      fullPath: '/api/waitlist'
-      preLoaderRoute: typeof ApiWaitlistRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/snippets': {
-      id: '/api/snippets'
-      path: '/api/snippets'
-      fullPath: '/api/snippets'
-      preLoaderRoute: typeof ApiSnippetsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/signatures': {
-      id: '/api/signatures'
-      path: '/api/signatures'
-      fullPath: '/api/signatures'
-      preLoaderRoute: typeof ApiSignaturesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/send': {
-      id: '/api/send'
-      path: '/api/send'
-      fullPath: '/api/send'
-      preLoaderRoute: typeof ApiSendRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/pull-requests': {
-      id: '/api/pull-requests'
-      path: '/api/pull-requests'
-      fullPath: '/api/pull-requests'
-      preLoaderRoute: typeof ApiPullRequestsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/message': {
-      id: '/api/message'
-      path: '/api/message'
-      fullPath: '/api/message'
-      preLoaderRoute: typeof ApiMessageRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/labels': {
-      id: '/api/labels'
-      path: '/api/labels'
-      fullPath: '/api/labels'
-      preLoaderRoute: typeof ApiLabelsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/image-proxy': {
-      id: '/api/image-proxy'
-      path: '/api/image-proxy'
-      fullPath: '/api/image-proxy'
-      preLoaderRoute: typeof ApiImageProxyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/gmail-signature': {
-      id: '/api/gmail-signature'
-      path: '/api/gmail-signature'
-      fullPath: '/api/gmail-signature'
-      preLoaderRoute: typeof ApiGmailSignatureRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/github-issues': {
-      id: '/api/github-issues'
-      path: '/api/github-issues'
-      fullPath: '/api/github-issues'
-      preLoaderRoute: typeof ApiGithubIssuesRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/emails': {
-      id: '/api/emails'
-      path: '/api/emails'
-      fullPath: '/api/emails'
-      preLoaderRoute: typeof ApiEmailsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/draft': {
-      id: '/api/draft'
-      path: '/api/draft'
-      fullPath: '/api/draft'
-      preLoaderRoute: typeof ApiDraftRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/contacts': {
-      id: '/api/contacts'
-      path: '/api/contacts'
-      fullPath: '/api/contacts'
-      preLoaderRoute: typeof ApiContactsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/accounts': {
-      id: '/api/accounts'
-      path: '/api/accounts'
-      fullPath: '/api/accounts'
-      preLoaderRoute: typeof ApiAccountsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/_app/webhooks': {
-      id: '/_app/webhooks'
-      path: '/webhooks'
-      fullPath: '/webhooks'
-      preLoaderRoute: typeof AppWebhooksRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/trash': {
-      id: '/_app/trash'
-      path: '/trash'
-      fullPath: '/trash'
-      preLoaderRoute: typeof AppTrashRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/spam': {
-      id: '/_app/spam'
-      path: '/spam'
-      fullPath: '/spam'
-      preLoaderRoute: typeof AppSpamRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/sent': {
-      id: '/_app/sent'
-      path: '/sent'
-      fullPath: '/sent'
-      preLoaderRoute: typeof AppSentRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/pull-requests': {
-      id: '/_app/pull-requests'
-      path: '/pull-requests'
-      fullPath: '/pull-requests'
-      preLoaderRoute: typeof AppPullRequestsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/labeled': {
-      id: '/_app/labeled'
-      path: '/labeled'
-      fullPath: '/labeled'
-      preLoaderRoute: typeof AppLabeledRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/issues': {
-      id: '/_app/issues'
-      path: '/issues'
-      fullPath: '/issues'
-      preLoaderRoute: typeof AppIssuesRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/_app/drafts': {
-      id: '/_app/drafts'
-      path: '/drafts'
-      fullPath: '/drafts'
-      preLoaderRoute: typeof AppDraftsRouteImport
+    '/_app/api': {
+      id: '/_app/api'
+      path: '/api'
+      fullPath: '/api'
+      preLoaderRoute: typeof AppApiRouteImport
       parentRoute: typeof AppRoute
     }
     '/_app/archived': {
@@ -594,18 +471,172 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppArchivedRouteImport
       parentRoute: typeof AppRoute
     }
-    '/_app/api': {
-      id: '/_app/api'
-      path: '/api'
-      fullPath: '/api'
-      preLoaderRoute: typeof AppApiRouteImport
+    '/_app/drafts': {
+      id: '/_app/drafts'
+      path: '/drafts'
+      fullPath: '/drafts'
+      preLoaderRoute: typeof AppDraftsRouteImport
       parentRoute: typeof AppRoute
     }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
+    '/_app/issues': {
+      id: '/_app/issues'
+      path: '/issues'
+      fullPath: '/issues'
+      preLoaderRoute: typeof AppIssuesRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/labeled': {
+      id: '/_app/labeled'
+      path: '/labeled'
+      fullPath: '/labeled'
+      preLoaderRoute: typeof AppLabeledRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/pull-requests': {
+      id: '/_app/pull-requests'
+      path: '/pull-requests'
+      fullPath: '/pull-requests'
+      preLoaderRoute: typeof AppPullRequestsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/sent': {
+      id: '/_app/sent'
+      path: '/sent'
+      fullPath: '/sent'
+      preLoaderRoute: typeof AppSentRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/spam': {
+      id: '/_app/spam'
+      path: '/spam'
+      fullPath: '/spam'
+      preLoaderRoute: typeof AppSpamRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/starred': {
+      id: '/_app/starred'
+      path: '/starred'
+      fullPath: '/starred'
+      preLoaderRoute: typeof AppStarredRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/trash': {
+      id: '/_app/trash'
+      path: '/trash'
+      fullPath: '/trash'
+      preLoaderRoute: typeof AppTrashRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/unread': {
+      id: '/_app/unread'
+      path: '/unread'
+      fullPath: '/unread'
+      preLoaderRoute: typeof AppUnreadRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/webhooks': {
+      id: '/_app/webhooks'
+      path: '/webhooks'
+      fullPath: '/webhooks'
+      preLoaderRoute: typeof AppWebhooksRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/api/accounts': {
+      id: '/api/accounts'
+      path: '/api/accounts'
+      fullPath: '/api/accounts'
+      preLoaderRoute: typeof ApiAccountsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/contacts': {
+      id: '/api/contacts'
+      path: '/api/contacts'
+      fullPath: '/api/contacts'
+      preLoaderRoute: typeof ApiContactsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/draft': {
+      id: '/api/draft'
+      path: '/api/draft'
+      fullPath: '/api/draft'
+      preLoaderRoute: typeof ApiDraftRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/emails': {
+      id: '/api/emails'
+      path: '/api/emails'
+      fullPath: '/api/emails'
+      preLoaderRoute: typeof ApiEmailsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/github-issues': {
+      id: '/api/github-issues'
+      path: '/api/github-issues'
+      fullPath: '/api/github-issues'
+      preLoaderRoute: typeof ApiGithubIssuesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/gmail-signature': {
+      id: '/api/gmail-signature'
+      path: '/api/gmail-signature'
+      fullPath: '/api/gmail-signature'
+      preLoaderRoute: typeof ApiGmailSignatureRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/image-proxy': {
+      id: '/api/image-proxy'
+      path: '/api/image-proxy'
+      fullPath: '/api/image-proxy'
+      preLoaderRoute: typeof ApiImageProxyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/labels': {
+      id: '/api/labels'
+      path: '/api/labels'
+      fullPath: '/api/labels'
+      preLoaderRoute: typeof ApiLabelsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/message': {
+      id: '/api/message'
+      path: '/api/message'
+      fullPath: '/api/message'
+      preLoaderRoute: typeof ApiMessageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/pull-requests': {
+      id: '/api/pull-requests'
+      path: '/api/pull-requests'
+      fullPath: '/api/pull-requests'
+      preLoaderRoute: typeof ApiPullRequestsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/send': {
+      id: '/api/send'
+      path: '/api/send'
+      fullPath: '/api/send'
+      preLoaderRoute: typeof ApiSendRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/signatures': {
+      id: '/api/signatures'
+      path: '/api/signatures'
+      fullPath: '/api/signatures'
+      preLoaderRoute: typeof ApiSignaturesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/snippets': {
+      id: '/api/snippets'
+      path: '/api/snippets'
+      fullPath: '/api/snippets'
+      preLoaderRoute: typeof ApiSnippetsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/waitlist': {
+      id: '/api/waitlist'
+      path: '/api/waitlist'
+      fullPath: '/api/waitlist'
+      preLoaderRoute: typeof ApiWaitlistRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/email/$id': {
@@ -614,6 +645,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/email/$id'
       preLoaderRoute: typeof AppEmailIdRouteImport
       parentRoute: typeof AppRoute
+    }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
   }
 }
@@ -627,7 +665,9 @@ interface AppRouteChildren {
   AppPullRequestsRoute: typeof AppPullRequestsRoute
   AppSentRoute: typeof AppSentRoute
   AppSpamRoute: typeof AppSpamRoute
+  AppStarredRoute: typeof AppStarredRoute
   AppTrashRoute: typeof AppTrashRoute
+  AppUnreadRoute: typeof AppUnreadRoute
   AppWebhooksRoute: typeof AppWebhooksRoute
   AppIndexRoute: typeof AppIndexRoute
   AppEmailIdRoute: typeof AppEmailIdRoute
@@ -642,7 +682,9 @@ const AppRouteChildren: AppRouteChildren = {
   AppPullRequestsRoute: AppPullRequestsRoute,
   AppSentRoute: AppSentRoute,
   AppSpamRoute: AppSpamRoute,
+  AppStarredRoute: AppStarredRoute,
   AppTrashRoute: AppTrashRoute,
+  AppUnreadRoute: AppUnreadRoute,
   AppWebhooksRoute: AppWebhooksRoute,
   AppIndexRoute: AppIndexRoute,
   AppEmailIdRoute: AppEmailIdRoute,
@@ -675,10 +717,11 @@ export const routeTree = rootRouteImport
   ._addFileTypes<FileRouteTypes>()
 
 import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
+import type { startInstance } from './start.ts'
 declare module '@tanstack/react-start' {
   interface Register {
     ssr: true
     router: Awaited<ReturnType<typeof getRouter>>
+    config: Awaited<ReturnType<typeof startInstance.getOptions>>
   }
 }

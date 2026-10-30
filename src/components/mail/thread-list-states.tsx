@@ -74,6 +74,14 @@ const FOLDER_EMPTY: Record<Folder, { title: string; sub: string }> = {
     title: "Nothing in your inbox",
     sub: "New mail shows up here the moment Gmail has it.",
   },
+  unread: {
+    title: "All caught up",
+    sub: "No unread messages in the selected accounts.",
+  },
+  starred: {
+    title: "No starred messages",
+    sub: "Star a message to find it here.",
+  },
   labeled: {
     title: "No labeled mail",
     sub: "Tag a message and it’s grouped here by tag.",

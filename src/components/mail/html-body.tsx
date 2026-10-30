@@ -1,92 +1,85 @@
 import DOMPurify from "dompurify";
 import { useEffect, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  emailDocument,
+  emailImageSource,
+  emailCss,
+  emailInlineSource,
+} from "@/lib/email/html-security";
 
-// DOMPurify needs a real DOM; no-op during SSR.
-// Privacy: remote subresources that would leak the reader's IP/User-Agent to the
-// sender's host are proxied (<img> src, inline-style url() backgrounds — fetched
-// server-side so the sender only sees our IP) or stripped (<link> stylesheets,
-// @font-face, @import, <video>/<audio>/<object>/<embed>). Remote fonts are a
-// tracking vector, so @font-face stays stripped even though it's "just CSS".
-
-/** Strip remote fetches from a <style> block: @import and http(s)/protocol-relative
- *  url() values (kills @font-face + remote background CSS). data:/cid: left intact. */
-function stripRemoteCss(css: string): string {
-  return css
-    .replace(/@import\b[^;]*;?/gi, "")
-    .replace(/url\(\s*(['"]?)\s*(?:https?:|\/\/)[^)]*\1\s*\)/gi, "url()");
-}
-
-/** Proxy remote url() values in an inline style attribute so background-image
- *  (and `background` shorthand) render without leaking the reader's IP. */
-function proxyCssUrls(css: string): string {
-  if (typeof window === "undefined") return css;
-  return css.replace(
-    /url\(\s*(['"]?)\s*((?:https?:\/\/|\/\/)[^)'"\s]+)\s*\1\s*\)/gi,
-    (_match, quote: string, url: string) => {
-      const abs = url.startsWith("//") ? `https:${url}` : url;
-      return `url(${quote}${window.location.origin}/api/image-proxy?url=${encodeURIComponent(abs)}${quote})`;
-    },
-  );
-}
-
-let hookRegistered = false;
-function sanitizeEmail(html: string): string {
+function sanitizeEmail(html: string, remoteAllowed: boolean): string {
   if (typeof window === "undefined") return "";
-  if (!hookRegistered) {
-    DOMPurify.addHook("afterSanitizeAttributes", (node) => {
-      if (node.tagName === "IMG") {
-        node.removeAttribute("srcset");
-        const src = node.getAttribute("src");
-        // Proxy absolute http(s) + protocol-relative srcs. cid: (inline attachment)
-        // srcs left for the parent to resolve in onLoad (has message id/account).
-        if (src && /^(https?:)?\/\//i.test(src)) {
-          const abs = src.startsWith("//") ? `https:${src}` : src;
-          // Absolute origin, not root-relative: in the srcdoc iframe "/api/…"
-          // resolves against about:srcdoc, not the app, and 404s.
-          node.setAttribute(
-            "src",
-            `${window.location.origin}/api/image-proxy?url=${encodeURIComponent(abs)}`,
-          );
-        }
-      }
-      // Any link that leaves the message opens in a new tab.
-      if (node.tagName === "A" && node.getAttribute("href")) {
-        node.setAttribute("target", "_blank");
-        node.setAttribute("rel", "noopener noreferrer");
-      }
-      // <style> remote CSS stripped — neutralizes @font-face + remote background CSS.
-      if (node.tagName === "STYLE" && node.textContent) {
-        node.textContent = stripRemoteCss(node.textContent);
-      }
-      // Inline styles instead get remote url() proxied so background images render.
-      const inlineStyle =
-        node.nodeType === 1 ? (node as Element).getAttribute("style") : null;
-      if (inlineStyle) {
-        (node as Element).setAttribute("style", proxyCssUrls(inlineStyle));
-      }
-    });
-    hookRegistered = true;
-  }
-  return DOMPurify.sanitize(html, {
-    WHOLE_DOCUMENT: true,
-    // Inline <style> kept (scrubbed above); From/layout styling lives there.
-    ADD_TAGS: ["style"],
-    ADD_ATTR: ["target"],
-    // Tags/attrs that fetch remote content (leaking the reader's IP). The image
-    // proxy only covers <img>, so block the rest.
-    FORBID_TAGS: [
-      "link",
-      "video",
-      "audio",
-      "source",
-      "picture",
-      "track",
-      "iframe",
-      "object",
-      "embed",
-    ],
-    FORBID_ATTR: ["srcset", "poster", "background"],
+  const purifier = DOMPurify(window);
+  purifier.addHook("afterSanitizeAttributes", (node) => {
+    if (node.tagName === "IMG") {
+      const source = emailImageSource(
+        node.getAttribute("src") ?? "",
+        window.location.origin,
+        remoteAllowed,
+      );
+      if (source) node.setAttribute("src", source);
+      else node.removeAttribute("src");
+      node.removeAttribute("srcset");
+    }
+    if (node.tagName === "A" && node.getAttribute("href")) {
+      node.setAttribute("target", "_blank");
+      node.setAttribute("rel", "noopener noreferrer");
+    }
+    if (node.tagName === "STYLE" && node.textContent) {
+      node.textContent = emailCss(
+        node.textContent,
+        window.location.origin,
+        remoteAllowed,
+      );
+    }
+    const element = node.nodeType === 1 ? (node as Element) : null;
+    const style = element?.getAttribute("style");
+    if (style && element) {
+      element.setAttribute(
+        "style",
+        emailCss(style, window.location.origin, remoteAllowed),
+      );
+    }
   });
+  return emailDocument(
+    purifier.sanitize(html, {
+      WHOLE_DOCUMENT: true,
+      USE_PROFILES: { html: true },
+      ADD_TAGS: ["style"],
+      ADD_ATTR: ["target"],
+      FORBID_TAGS: [
+        "meta",
+        "base",
+        "link",
+        "video",
+        "audio",
+        "source",
+        "picture",
+        "track",
+        "iframe",
+        "object",
+        "embed",
+        "svg",
+        "math",
+        "form",
+        "input",
+        "button",
+        "textarea",
+        "select",
+      ],
+      FORBID_ATTR: [
+        "srcset",
+        "poster",
+        "background",
+        "action",
+        "formaction",
+        "ping",
+      ],
+    }),
+    window.location.origin,
+    remoteAllowed,
+  );
 }
 
 /** Sandboxed HTML email body: frameless, no inner scrollbars, auto-sizes to
@@ -104,14 +97,19 @@ export function HtmlBody({
   messageId?: string;
   inlineAttachments?: Record<
     string,
-    { attachmentId: string; mimeType: string }
+    { attachmentId: string; mimeType: string; data?: string }
   >;
 }) {
   const ref = useRef<HTMLIFrameElement>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const [doc, setDoc] = useState("");
+  const [allowedHtml, setAllowedHtml] = useState<string | null>(null);
+  const remoteAllowed = allowedHtml === html;
 
-  useEffect(() => setDoc(sanitizeEmail(html)), [html]);
+  useEffect(
+    () => setDoc(sanitizeEmail(html, remoteAllowed)),
+    [html, remoteAllowed],
+  );
   useEffect(() => () => observerRef.current?.disconnect(), []);
 
   const onLoad = () => {
@@ -128,10 +126,14 @@ export function HtmlBody({
         const cid = src.slice(4).replace(/^<|>$/g, "");
         const att = inlineAttachments[cid];
         if (!att) return;
-        img.setAttribute(
-          "src",
-          `${window.location.origin}/api/message?accountId=${encodeURIComponent(accountId)}&id=${encodeURIComponent(messageId)}&attachment=${encodeURIComponent(att.attachmentId)}&mime=${encodeURIComponent(att.mimeType)}`,
+        const source = emailInlineSource(
+          att,
+          window.location.origin,
+          accountId,
+          messageId,
         );
+        if (source) img.setAttribute("src", source);
+        else img.removeAttribute("src");
       });
     }
 
@@ -210,15 +212,32 @@ export function HtmlBody({
   };
 
   return (
-    <iframe
-      ref={ref}
-      title="Message body"
-      scrolling="no"
-      sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-      srcDoc={doc}
-      onLoad={onLoad}
-      className="block w-full overflow-hidden rounded-lg bg-white"
-    />
+    <>
+      <div className="mb-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>
+          {remoteAllowed
+            ? "Trusted external images enabled for this message."
+            : "External images blocked."}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setAllowedHtml(remoteAllowed ? null : html)}
+        >
+          {remoteAllowed ? "Block images" : "Load trusted images"}
+        </Button>
+      </div>
+      <iframe
+        ref={ref}
+        title="Message body"
+        scrolling="no"
+        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+        srcDoc={doc}
+        referrerPolicy="no-referrer"
+        onLoad={onLoad}
+        className="block w-full overflow-hidden rounded-lg bg-white"
+      />
+    </>
   );
 }
 

@@ -13,24 +13,29 @@ decisions already made.
 - `bun run build` — verifies the Tailwind `@theme` + bundle.
 - `bun test` — unit tests via Bun's native runner. Pure logic only (no React /
   DOM); resolves the `@/` alias from tsconfig paths.
+- `bun run test:runtime` — after build, Node 24 runs real workerd + ephemeral D1
+  integration checks. Do not substitute Bun for the Wrangler test harness.
+- `bun run db:migrate:local` / `bun run db:migrate:remote` — apply `migrations/`
+  to local/production D1. Historical `prisma/migrations/` is PostgreSQL only.
 - `bun run encrypt-tokens` — one-time, idempotent backfill that encrypts any
   plaintext OAuth tokens left in the `account` table.
-- `bun run set-owner <email>` — grant a user the `OWNER` role (defaults to the
-  primary email). The only sanctioned way to mint an owner.
+- `bun run set-owner <email> [--remote]` — grant a user the `OWNER` role.
+  The only sanctioned way to mint an owner; local D1 is the default.
 - `bunx --bun shadcn@latest add <component>` — add ui primitives.
 
 ## Hard rules
 
-- **Never store mail or private info in the database.** The schema is the
-  Better Auth tables (`User`, `Session`, `Account`, `Verification`) plus a
+- **Never persist mailbox content.** D1 contains Better Auth tables
+  (`User`, `Session`, `Account`, `Verification`), user-created snippets and
+  signatures (explicitly approved), verified linked-account email metadata, and a
   `role` enum on `User` (`USER|OWNER`, via Better Auth `additionalFields` with
   `input:false` so a client can never self-assign).
   OAuth tokens on `Account` are encrypted at rest (`account.encryptOAuthTokens`,
   key = `BETTER_AUTH_SECRET`). Better Auth owns auth-table writes; direct
-  Prisma writes also happen for the maintenance
-  scripts (`set-owner`, `encrypt-tokens`). Gmail data is still fetched live and
-  never persisted — subjects, senders, snippets exist only in HTTP responses
-  and React state. Adding any persistence of message data is a deliberate
+  maintenance scripts use bounded D1 SQL. Gmail data is fetched live and
+  never persisted — subjects, senders, message snippets, bodies and attachments
+  exist only in HTTP responses and in-memory state. Draft autosaves go to Gmail;
+  no IndexedDB mail buffer is used. Adding persistence of message data is a deliberate
   product decision the user must make, not a refactor.
 - **Commits: no attribution.** Never append "Generated with Claude Code" or
   `Co-Authored-By` trailers. Conventional-ish subjects, lowercase, body
@@ -79,6 +84,23 @@ decisions already made.
   mono `SOON` chip), never as silently dead buttons.
 
 ## Architecture decisions (don't relitigate)
+
+- **Workers + D1 is the sole server runtime.** `src/worker.ts` establishes
+  request-local bindings/Prisma and a Gmail subrequest budget. Better Auth uses
+  the SQLite adapter with transactions disabled. Read secrets only through
+  validated runtime config; authenticated app routes are client-rendered.
+- **Private admission is deny by default.** `ALLOWED_EMAILS` covers every user
+  and linked Google identity. Google `accountId` is the stable provider subject;
+  Better Auth 1.7 token/unlink APIs require the owned database `recordId`.
+  Never return tokens to the browser or skip explicit ownership checks.
+- **Unified mailbox is the default.** `use-unified-mail.ts` maintains per-account
+  cursors; `unified-mail.ts` merges by internalDate and compound account/message
+  identity, holding older rows until all loaded frontiers permit them. Client
+  concurrency is three; server page size is ten. Invalidate all mail query families
+  with `invalidateMailQueries` after mutations. Preserve the separate board view.
+- HTML mail stays in a scriptless CSP sandbox. Remote images require per-message
+  consent and exact administrator-configured `IMAGE_PROXY_HOSTS`; inline images
+  accept raster formats only. Never relax proxy host policy to fix broken images.
 
 - **Inbox tiles are a custom split-tree implementation** —
   `src/lib/layout-tree.ts` (pure tree ops) + `inbox-tiles.tsx` (pointer drag,
