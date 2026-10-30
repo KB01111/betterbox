@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth/auth";
+import prisma from "@/lib/db/prisma.server";
 
 /** Fresh GitHub access token for the signed-in user, or null if no GitHub
  *  account is linked yet. Auto-refreshes when the provider supports it. */
@@ -7,8 +8,10 @@ export async function getGithubToken(
   userId: string,
 ): Promise<string | null> {
   try {
+    const account = await prisma.account.findFirst({ where: { userId, providerId: "github" }, select: { id: true } });
+    if (!account) return null;
     const { accessToken } = await auth.api.getAccessToken({
-      body: { providerId: "github", userId },
+      body: { accountId: account.id, userId },
       headers,
     });
     return accessToken ?? null;

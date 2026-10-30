@@ -10,7 +10,8 @@ import {
 import { useSettings } from "@/hooks/use-settings";
 import { LabelDot } from "@/components/mail/tag-picker";
 import { ThreadRow } from "@/components/mail/thread-row";
-import { SkeletonRows } from "@/components/mail/thread-list-states";
+import { ErrorState, SkeletonRows } from "@/components/mail/thread-list-states";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type RowHandlers = {
@@ -29,7 +30,8 @@ export function LabeledView({
   getOpenEmail,
   portalContainer,
 }: { accountId: string; dotIndex: number } & RowHandlers) {
-  const labels = useLabelsQuery(accountId).data ?? [];
+  const labelsQuery = useLabelsQuery(accountId);
+  const labels = labelsQuery.data ?? [];
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   const toggle = (id: string) =>
@@ -40,6 +42,14 @@ export function LabeledView({
       return next;
     });
 
+  if (labelsQuery.isPending) return <SkeletonRows count={3} />;
+  if (labelsQuery.error)
+    return (
+      <ErrorState
+        detail={labelsQuery.error.message}
+        onRetry={() => void labelsQuery.refetch()}
+      />
+    );
   if (labels.length === 0) {
     return (
       <div className="flex flex-col items-center gap-1 px-6 py-12 text-center">
@@ -115,7 +125,12 @@ function LabelAccordion({
       </button>
 
       {open &&
-        (!emails ? (
+        (query.error && !emails ? (
+          <ErrorState
+            detail={query.error.message}
+            onRetry={() => void query.refetch()}
+          />
+        ) : !emails ? (
           <SkeletonRows density={density} count={1} />
         ) : emails.length === 0 ? (
           <p className="px-9 py-3 text-[12.5px] text-muted-foreground">
@@ -135,6 +150,26 @@ function LabelAccordion({
             />
           ))
         ))}
+      {open && emails && query.error && (
+        <p role="alert" className="p-3 text-xs text-destructive">
+          Could not load more messages.{" "}
+          <button type="button" onClick={() => void query.fetchNextPage()}>
+            Retry
+          </button>
+        </p>
+      )}
+      {open && query.hasNextPage && (
+        <div className="p-3">
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={query.isFetchingNextPage}
+            onClick={() => void query.fetchNextPage()}
+          >
+            {query.isFetchingNextPage ? "Loading…" : "Load more"}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

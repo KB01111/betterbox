@@ -5,6 +5,7 @@ import { TriangleAlertIcon } from "lucide-react";
 import { signIn } from "@/lib/auth/auth-client";
 import { fetchGoogleConfigured } from "@/lib/auth/auth-session";
 import { GITHUB_URL } from "@/components/integrations/github-mark";
+import { authorizationErrorMessage } from "@/lib/auth/auth-errors";
 
 /**
  * Sign-in page — implements the "BetterBox Sign In (standalone)" design handoff:
@@ -13,6 +14,7 @@ import { GITHUB_URL } from "@/components/integrations/github-mark";
  * built on the Gmail API, so a Google account is the login).
  */
 export const Route = createFileRoute("/sign-in")({
+  validateSearch: (search: Record<string, unknown>): { error?: string } => ({ error: typeof search.error === "string" ? search.error : undefined }),
   head: () => ({ meta: [{ title: "Sign in — BetterBox" }] }),
   // Resolve Google config on the server so a fresh self-host instance shows
   // setup guidance instead of a Continue button that 500s mid-flow.
@@ -49,15 +51,18 @@ function SignIn() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { googleConfigured } = Route.useLoaderData();
+  const callback = authorizationErrorMessage(Route.useSearch().error);
 
-  const onGoogle = () => {
+  const onGoogle = async () => {
     setError(null);
     setLoading(true);
-    // signIn() redirects to Google on success; only the error path returns here.
-    signIn().catch((err) => {
-      setError(err instanceof Error ? err.message : "Sign-in failed");
+    try {
+      const result = await signIn();
+      if (result.error) { setError(authorizationErrorMessage(result.error.code)); setLoading(false); }
+    } catch {
+      setError("Google could not be reached. Check your connection and try again.");
       setLoading(false);
-    });
+    }
   };
 
   return (
@@ -98,21 +103,17 @@ function SignIn() {
               </span>
               <div className="flex min-w-0 flex-col gap-[9px]">
                 <p className="text-[12.5px] leading-[1.4] font-semibold text-label-red">
-                  You will see a Google security warning
+                  Private, authorized access
                 </p>
                 <p className="text-[12px] leading-[1.6] text-[color-mix(in_srgb,var(--color-label-red)_82%,#ffffff)]">
-                  BetterBox is a hobby project and Google's verification costs
-                  ~$750/yr. I can't justify that right now, so you'll see an
-                  "unverified app" warning. Click{" "}
-                  <strong className="font-bold text-label-red">Advanced</strong>
-                  , then{" "}
-                  <strong className="font-bold text-label-red">
-                    Proceed to BetterBox
-                  </strong>{" "}
-                  to continue.
+                  Use an address approved by this instance's owner and registered
+                  with the Google OAuth project. Google may display a test-app
+                  warning. Grant access only if you trust this deployment.
                 </p>
                 <p className="text-[12px] leading-[1.6] text-[color-mix(in_srgb,var(--color-label-red)_82%,#ffffff)]">
-                  Not comfortable? You can read the{" "}
+                  BetterBox requests permission to read, search, send and organize
+                  your Gmail. Your messages stay in Google and pass through this
+                  instance when you use the app. Read the{" "}
                   <a
                     href="/privacy"
                     className="text-label-red underline decoration-1 underline-offset-2 hover:decoration-2"
@@ -152,12 +153,14 @@ function SignIn() {
               Google sign-in isn't configured
             </p>
             <p className="text-[12px] leading-[1.6] text-ink-subtle">
-              This instance has no Google OAuth credentials yet. Add them to
+              Ask the instance owner to configure Google credentials, a strong
+              auth secret, the canonical URL and an explicit allowed-email list.
+              Local development uses
               your{" "}
               <code className="rounded bg-surface-1 px-1 py-0.5 font-mono text-[11px]">
-                .env
+                .dev.vars
               </code>{" "}
-              and restart:
+              ; hosted deployments use Cloudflare Secrets.
             </p>
             <pre className="overflow-x-auto rounded bg-surface-1 px-2.5 py-2 font-mono text-[11px] leading-[1.6] text-ink-subtle">
               GOOGLE_CLIENT_ID=...{"\n"}GOOGLE_CLIENT_SECRET=...
@@ -181,9 +184,9 @@ function SignIn() {
           </div>
         )}
 
-        {error && (
-          <p className="mt-3 text-[12px] leading-normal text-label-red">
-            {error}
+        {(error || callback) && (
+          <p role="alert" className="mt-3 text-[12px] leading-normal text-label-red">
+            {error || callback}
           </p>
         )}
 

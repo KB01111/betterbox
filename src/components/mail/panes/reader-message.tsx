@@ -4,6 +4,7 @@ import {
   ExternalLinkIcon,
   FileTextIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import type { FullEmail } from "@/lib/mail-queries";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,38 @@ export function ThreadMessage({
   narrow: boolean;
 }) {
   const sender = parseAddress(message.from);
+  const [attachmentUrls, setAttachmentUrls] = useState<Record<number, string>>(
+    {},
+  );
+  useEffect(() => {
+    const urls: Record<number, string> = {};
+    for (const [index, attachment] of (message.attachments ?? []).entries()) {
+      if (attachment.data === undefined) continue;
+      try {
+        const binary = atob(
+          attachment.data.replace(/-/g, "+").replace(/_/g, "/"),
+        );
+        const bytes = Uint8Array.from(binary, (character) =>
+          character.charCodeAt(0),
+        );
+        const safeType =
+          /^(image\/(png|jpe?g|gif|webp|avif)|application\/pdf|text\/plain)$/i.test(
+            attachment.mimeType,
+          )
+            ? attachment.mimeType
+            : "application/octet-stream";
+        urls[index] = URL.createObjectURL(
+          new Blob([bytes], { type: safeType }),
+        );
+      } catch {
+        // A malformed embedded attachment stays unavailable instead of executing as page content.
+      }
+    }
+    setAttachmentUrls(urls);
+    return () => {
+      for (const url of Object.values(urls)) URL.revokeObjectURL(url);
+    };
+  }, [message.attachments]);
 
   if (!expanded) {
     return (
@@ -110,6 +143,27 @@ export function ThreadMessage({
             </div>
           </Hint>
         </div>
+        {[
+          { label: "Cc", value: message.cc },
+          { label: "Bcc", value: message.bcc },
+        ]
+          .filter(({ value }) => value)
+          .map(({ label, value }) => (
+            <div
+              key={label}
+              className={cn(
+                "flex items-center gap-2 border-t bg-secondary py-2",
+                narrow ? "px-3.5" : "px-[18px]",
+              )}
+            >
+              <span className="shrink-0 text-[11.5px] text-muted-foreground/70">
+                {label}
+              </span>
+              <span className="min-w-0 truncate font-mono text-[11.5px] text-muted-foreground">
+                {value}
+              </span>
+            </div>
+          ))}
         <div
           className={cn(
             "flex items-center gap-2 border-t bg-secondary py-2.5",
@@ -173,10 +227,12 @@ export function ThreadMessage({
 
       {message.attachments && message.attachments.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {message.attachments.map((att) => {
+          {message.attachments.map((att, index) => {
             const base = `/api/message?accountId=${encodeURIComponent(accountId)}&id=${encodeURIComponent(message.id)}&attachment=${encodeURIComponent(att.attachmentId)}&mime=${encodeURIComponent(att.mimeType)}`;
-            const viewUrl = `${base}&view=1`;
-            const downloadUrl = `${base}&download=1&filename=${encodeURIComponent(att.filename)}`;
+            const viewUrl = attachmentUrls[index] ?? `${base}&view=1`;
+            const downloadUrl =
+              attachmentUrls[index] ??
+              `${base}&download=1&filename=${encodeURIComponent(att.filename)}`;
             const isImage = /^image\/(png|jpe?g|gif|webp|avif)$/i.test(
               att.mimeType,
             );
@@ -187,7 +243,7 @@ export function ThreadMessage({
               "inline-flex size-7 flex-none items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
             return (
               <div
-                key={att.attachmentId}
+                key={`${att.attachmentId}:${att.filename}`}
                 className="flex items-center gap-2.5 rounded-lg border bg-card p-2 pr-1.5"
               >
                 {isImage ? (

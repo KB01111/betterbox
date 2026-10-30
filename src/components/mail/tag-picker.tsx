@@ -13,6 +13,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
   createLabel,
+  invalidateMailQueries,
   deleteLabel,
   labelsQueryKey,
   renameLabel,
@@ -97,6 +98,7 @@ export function useTagActions(accountId: string, email: FullEmail | undefined) {
       queryClient.invalidateQueries({
         queryKey: ["emails-label", accountId, label.id],
       });
+      invalidateMailQueries(queryClient, accountId);
     },
     [accountId, email, patchLabels, queryClient],
   );
@@ -105,7 +107,9 @@ export function useTagActions(accountId: string, email: FullEmail | undefined) {
     async (name: string) => {
       const trimmed = name.trim();
       if (!email || !trimmed) return;
-      const label = await createLabel(accountId, trimmed);
+      let label: Label;
+      try { label = await createLabel(accountId, trimmed); }
+      catch { toast.error("Couldn't create tag."); return; }
       queryClient.setQueryData<Label[]>(labelsQueryKey(accountId), (current) =>
         (current ?? []).some((l) => l.id === label.id)
           ? current
@@ -121,6 +125,7 @@ export function useTagActions(accountId: string, email: FullEmail | undefined) {
       queryClient.invalidateQueries({
         queryKey: ["emails-label", accountId, label.id],
       });
+      invalidateMailQueries(queryClient, accountId);
     },
     [accountId, email, patchLabels, queryClient],
   );
@@ -129,6 +134,7 @@ export function useTagActions(accountId: string, email: FullEmail | undefined) {
     async (label: Label, name: string) => {
       const trimmed = name.trim();
       if (!trimmed || trimmed === label.name) return;
+      const previous = queryClient.getQueryData<Label[]>(labelsQueryKey(accountId));
       queryClient.setQueryData<Label[]>(labelsQueryKey(accountId), (current) =>
         (current ?? []).map((l) =>
           l.id === label.id ? { ...l, name: trimmed } : l,
@@ -137,8 +143,11 @@ export function useTagActions(accountId: string, email: FullEmail | undefined) {
       try {
         await renameLabel(accountId, label.id, trimmed);
       } catch {
-        /* leave the optimistic name; a refetch reconciles */
+        queryClient.setQueryData(labelsQueryKey(accountId), previous);
         toast.error("Couldn't rename tag.");
+      } finally {
+        queryClient.invalidateQueries({ queryKey: labelsQueryKey(accountId) });
+        invalidateMailQueries(queryClient, accountId);
       }
     },
     [accountId, queryClient],
@@ -146,6 +155,9 @@ export function useTagActions(accountId: string, email: FullEmail | undefined) {
 
   const deleteTag = useCallback(
     async (label: Label) => {
+      // Preserve every cached label until Gmail confirms deletion.
+      try { await deleteLabel(accountId, label.id); }
+      catch { toast.error("Couldn't delete tag."); return; }
       queryClient.setQueryData<Label[]>(labelsQueryKey(accountId), (current) =>
         (current ?? []).filter((l) => l.id !== label.id),
       );
@@ -176,12 +188,8 @@ export function useTagActions(accountId: string, email: FullEmail | undefined) {
             ? { ...e, labelIds: e.labelIds.filter((id) => id !== label.id) }
             : e,
       );
-      try {
-        await deleteLabel(accountId, label.id);
-      } catch {
-        /* optimistic removal stands */
-        toast.error("Couldn't delete tag.");
-      }
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey(accountId) });
+      invalidateMailQueries(queryClient, accountId);
     },
     [accountId, queryClient],
   );

@@ -1,6 +1,12 @@
 import { auth } from "@/lib/auth/auth";
 import { prisma } from "@/lib/db/prisma.server";
 import { json, jsonError } from "@/lib/json-response";
+import {
+  enumField,
+  identifierField,
+  readJsonBody,
+  stringField,
+} from "@/lib/request-security";
 import { createFileRoute } from "@tanstack/react-router";
 
 /**
@@ -33,12 +39,13 @@ export const Route = createFileRoute("/api/snippets")({
         if (!session) return json({ error: "Not signed in" }, 401);
         const userId = session.user.id;
 
-        const body = (await request.json().catch(() => null)) as {
-          op?: "create" | "update" | "delete";
-          id?: string;
-          trigger?: string;
-          text?: string;
-        } | null;
+        const raw = await readJsonBody(request);
+        const body = {
+          op: enumField(raw, "op", ["create", "update", "delete"]),
+          id: identifierField(raw, "id"),
+          trigger: stringField(raw, "trigger", 100),
+          text: stringField(raw, "text", 100_000),
+        };
         if (!body?.op) return json({ error: "op is required" }, 400);
 
         try {

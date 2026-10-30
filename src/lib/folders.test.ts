@@ -2,6 +2,16 @@ import { describe, expect, test } from "bun:test";
 import { FOLDER_QUERY, FOLDERS, isFolder, toFolder } from "@/lib/folders";
 
 describe("folders", () => {
+  test("unread and starred are live Gmail folder scopes", () => {
+    expect(isFolder("unread")).toBe(true);
+    expect(isFolder("starred")).toBe(true);
+    expect(FOLDER_QUERY["unread" as keyof typeof FOLDER_QUERY]).toBe(
+      "is:unread -in:trash -in:spam",
+    );
+    expect(FOLDER_QUERY["starred" as keyof typeof FOLDER_QUERY]).toBe(
+      "is:starred -in:trash -in:spam",
+    );
+  });
   test("toFolder falls back to inbox for anything invalid", () => {
     expect(toFolder(undefined)).toBe("inbox");
     expect(toFolder("nope")).toBe("inbox");

@@ -1,37 +1,31 @@
-/**
- * Promote a user to OWNER (the only role that unlocks dev affordances like
- * test accounts). Role is `input: false` in the auth config, so it can never be
- * set from the client — this script is the out-of-band grant.
- *
- * Run with: bun --env-file=.env scripts/set-owner.ts <email>
- */
-import prisma from "../src/lib/prisma.server";
+import { executeD1, sqlString } from "./d1";
 
-const email = process.argv[2];
-
-if (!email) {
-  console.error("Usage: bun --env-file=.env scripts/set-owner.ts <email>");
-  process.exit(1);
+export async function grantOwner(
+  input: string,
+  execute: typeof executeD1 = executeD1,
+) {
+  const email = input.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
+    throw new Error("Usage: bun run set-owner you@example.com [--remote]");
+  const matches = await execute<{ id: string }>(
+    `SELECT "id" FROM "user" WHERE lower("email")=${sqlString(email)};`,
+  );
+  if (matches.length !== 1)
+    throw new Error(
+      "No unique matching user. Sign in with that allowed account first.",
+    );
+  const updated = await execute<{ id: string }>(
+    `UPDATE "user" SET "role"='OWNER', "updatedAt"=${Date.now()} WHERE "id"=${sqlString(matches[0].id)} AND lower("email")=${sqlString(email)} AND (SELECT count(*) FROM "user" WHERE lower("email")=${sqlString(email)})=1 RETURNING "id";`,
+  );
+  if (updated.length !== 1)
+    throw new Error(
+      "Matching user changed. No owner role was granted; retry after checking the unique identity.",
+    );
 }
 
-async function main() {
-  const user = await prisma.user.update({
-    where: { email },
-    data: { role: "OWNER" },
-    select: { id: true, email: true, role: true },
-  });
-  console.log(`Promoted ${user.email} → ${user.role}`);
+if (import.meta.main) {
+  await grantOwner(
+    process.argv.slice(2).find((arg) => !arg.startsWith("--")) ?? "",
+  );
+  console.log("Owner role granted to the matching user.");
 }
-
-main()
-  .catch((error) => {
-    if (error?.code === "P2025") {
-      console.error(`No user found with email "${email}".`);
-    } else {
-      console.error("Failed to set owner:", error);
-    }
-    process.exitCode = 1;
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });

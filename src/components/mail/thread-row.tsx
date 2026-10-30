@@ -1,4 +1,5 @@
-import { BadgeCheckIcon } from "lucide-react";
+import { BadgeCheckIcon, PaperclipIcon, StarIcon } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 
 import { AccountDot, useAccountColor } from "@/components/shell/account-dot";
@@ -20,6 +21,9 @@ export type ThreadRowEmail = {
   from: string;
   subject: string;
   date: string;
+  internalDate?: number;
+  starred?: boolean;
+  hasAttachment?: boolean;
   snippet?: string;
   unread?: boolean;
   /** Gmail label ids on the message (tags are the user-created ones). */
@@ -55,7 +59,11 @@ function shortTime(raw: string, hour12: boolean): string {
   return date.toLocaleDateString([], { month: "short", year: "2-digit" });
 }
 
-import { actOnEmail, markEmailsRead } from "@/lib/mail-queries";
+import {
+  actOnEmail,
+  invalidateMailQueries,
+  markEmailsRead,
+} from "@/lib/mail-queries";
 
 export function ThreadRow({
   email,
@@ -65,6 +73,9 @@ export function ThreadRow({
   accountId,
   onClick,
   portalContainer,
+  accountEmail,
+  highlight,
+  labels,
 }: {
   email: ThreadRowEmail;
   density?: Density;
@@ -75,15 +86,44 @@ export function ThreadRow({
   /** Portal target for the right-click menu — set in the landing demo so it
    *  stays inside (and scaled with) the demo box instead of escaping to body. */
   portalContainer?: React.RefObject<HTMLElement | null>;
+  accountEmail?: string;
+  highlight?: string;
+  labels?: string[];
 }) {
+  const queryClient = useQueryClient();
+  const run = async (task: () => Promise<void>) => {
+    if (!accountId) return false;
+    try {
+      await task();
+      invalidateMailQueries(queryClient, accountId);
+      return true;
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : "Could not update message",
+      );
+      return false;
+    }
+  };
   const runMarkRead = async () => {
     if (!accountId) return;
-    await markEmailsRead(accountId, [email.id]);
+    await run(() =>
+      email.unread
+        ? markEmailsRead(accountId, [email.id])
+        : actOnEmail(accountId, email.id, "unread"),
+    );
   };
 
   const runTrash = async () => {
     if (!accountId) return;
-    await actOnEmail(accountId, email.id, "trash");
+    const succeeded = await run(() => actOnEmail(accountId, email.id, "trash"));
+    if (succeeded)
+      toast("Moved to trash", {
+        action: {
+          label: "Undo",
+          onClick: () =>
+            void run(() => actOnEmail(accountId, email.id, "restore")),
+        },
+      });
   };
 
   // Open the reader, then signal it. The ReaderPane mounts on the next render
@@ -118,6 +158,24 @@ export function ThreadRow({
   const accountColor = useAccountColor(dotIndex, accountId);
   const unread = email.unread ?? false;
   const subject = email.subject || "(no subject)";
+  const mark = (text: string) => {
+    const query = highlight?.trim();
+    const index =
+      query && !query.includes(":")
+        ? text.toLowerCase().indexOf(query.toLowerCase())
+        : -1;
+    return index < 0 || !query ? (
+      text
+    ) : (
+      <>
+        {text.slice(0, index)}
+        <mark className="rounded bg-primary/20 text-inherit">
+          {text.slice(index, index + query.length)}
+        </mark>
+        {text.slice(index + query.length)}
+      </>
+    );
+  };
 
   const avatar = (size: string) =>
     inboxAvatars ? (
@@ -146,7 +204,7 @@ export function ThreadRow({
             : "font-normal text-foreground/70",
         )}
       >
-        {senderName(email.from)}
+        {mark(senderName(email.from))}
       </span>
       {verified && (
         <BadgeCheckIcon
@@ -163,7 +221,25 @@ export function ThreadRow({
         unread ? "text-muted-foreground" : "text-muted-foreground/70",
       )}
     >
-      {shortTime(email.date, clock === "12h")}
+      {email.starred && (
+        <StarIcon
+          aria-label="Starred"
+          className="mr-1 inline size-3 text-label-yellow"
+          fill="currentColor"
+        />
+      )}
+      {email.hasAttachment && (
+        <PaperclipIcon
+          aria-label="Has attachments"
+          className="mr-1 inline size-3"
+        />
+      )}
+      {shortTime(
+        email.internalDate
+          ? new Date(email.internalDate).toISOString()
+          : email.date,
+        clock === "12h",
+      )}
     </span>
   );
   const subjectSnippet = (
@@ -173,7 +249,7 @@ export function ThreadRow({
           unread ? "font-medium text-foreground" : "text-muted-foreground",
         )}
       >
-        {subject}
+        {mark(subject)}
       </span>
       {showPreview && email.snippet && (
         <span
@@ -182,9 +258,15 @@ export function ThreadRow({
             previewFont === "mono" && "font-mono text-[11px]",
           )}
         >
-          {`  —  ${email.snippet}`}
+          {"  —  "}
+          {mark(email.snippet)}
         </span>
       )}
+      {labels?.length ? (
+        <span className="ml-2 text-[10px] text-primary">
+          {labels.slice(0, 2).join(" · ")}
+        </span>
+      ) : null}
     </span>
   );
 
@@ -209,13 +291,21 @@ export function ThreadRow({
               {avatar("size-[18px]")}
               <span className="flex w-28 shrink-0 text-[12.5px]">{sender}</span>
               {subjectSnippet}
+              {accountEmail && (
+                <span
+                  className="max-w-28 truncate rounded bg-muted px-1 font-mono text-[9px] text-muted-foreground"
+                  title={accountEmail}
+                >
+                  {accountEmail}
+                </span>
+              )}
               <span className="min-w-[54px] shrink-0 text-right">{time}</span>
             </button>
           </ContextMenuTrigger>
           <ContextMenuContent container={portalContainer}>
             <ContextMenuGroup>
               <ContextMenuItem onClick={runMarkRead}>
-                Mark as read
+                {email.unread ? "Mark as read" : "Mark as unread"}
               </ContextMenuItem>
               <ContextMenuItem onClick={runReply}>Reply</ContextMenuItem>
               <ContextMenuItem onClick={runForward}>Forward</ContextMenuItem>
@@ -263,6 +353,14 @@ export function ThreadRow({
             <span className="flex min-w-0 flex-1 flex-col gap-0.5">
               <span className="flex items-center gap-2 text-[13px]">
                 <span className="flex min-w-0 flex-1 text-left">{sender}</span>
+                {accountEmail && (
+                  <span
+                    className="max-w-28 truncate font-mono text-[9px] text-muted-foreground"
+                    title={accountEmail}
+                  >
+                    {accountEmail}
+                  </span>
+                )}
                 {time}
               </span>
               {subjectSnippet}
@@ -272,7 +370,7 @@ export function ThreadRow({
         <ContextMenuContent container={portalContainer}>
           <ContextMenuGroup>
             <ContextMenuItem onClick={runMarkRead}>
-              Mark as read
+              {email.unread ? "Mark as read" : "Mark as unread"}
             </ContextMenuItem>
             <ContextMenuItem onClick={runReply}>Reply</ContextMenuItem>
             <ContextMenuItem onClick={runForward}>Forward</ContextMenuItem>

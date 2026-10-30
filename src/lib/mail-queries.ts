@@ -3,11 +3,13 @@ import {
   useQueries,
   useQuery,
   type InfiniteData,
+  type QueryClient,
 } from "@tanstack/react-query";
 import type { ThreadRowEmail } from "@/components/mail/thread-row";
-import type { Account } from "@/lib/account";
+import { type Account, mergeAccountProfile } from "@/lib/account";
 import { FOLDER_QUERY, type Folder } from "@/lib/folders";
 import { isSendingDisabled } from "@/hooks/use-settings";
+import { createRequestLimiter } from "@/lib/unified-mail";
 import {
   isTestAccount,
   makeTestEmails,
@@ -16,6 +18,9 @@ import {
   markTestAccountRead,
   markTestEmailsRead,
   removeTestLabel,
+  getTestLabels,
+  createTestLabel,
+  renameTestLabel,
   setTestEmailLabel,
   testLabelEmails,
   upsertTestDraft,
@@ -26,10 +31,19 @@ export type FullEmail = ThreadRowEmail & {
   to: string;
   /** Original Cc recipients (carried over by reply-all). Absent on demo mail. */
   cc?: string;
+  bcc?: string;
+  replyTo?: string;
+  inReplyTo?: string;
   /** cid → inline attachment, for rendering <img src="cid:…">. Absent on demo mail. */
   inlineAttachments?: Record<
     string,
-    { attachmentId: string; mimeType: string }
+    {
+      attachmentId: string;
+      mimeType: string;
+      filename?: string;
+      size?: number;
+      data?: string;
+    }
   >;
   /** Named, downloadable attachments (the paperclip kind). */
   attachments?: {
@@ -37,6 +51,8 @@ export type FullEmail = ThreadRowEmail & {
     filename: string;
     mimeType: string;
     size: number;
+    data?: string;
+    contentId?: string;
   }[];
   messageId: string;
   threadId: string;
@@ -46,7 +62,17 @@ export type FullEmail = ThreadRowEmail & {
   bodyHtml?: string;
 };
 
-export type MessageAction = "archive" | "trash" | "star" | "unstar";
+export type MessageAction =
+  | "archive"
+  | "trash"
+  | "star"
+  | "unstar"
+  | "read"
+  | "unread"
+  | "restore"
+  | "spam"
+  | "unspam"
+  | "inbox";
 
 // Never stored by BetterBox — only held in TanStack Query cache.
 export type Label = {
@@ -55,16 +81,30 @@ export type Label = {
   color?: { backgroundColor?: string; textColor?: string };
 };
 
-const TEST_LABELS: Label[] = [
-  { id: "Label_vip", name: "VIP" },
-  { id: "Label_receipts", name: "Receipts" },
-  { id: "Label_followup", name: "Follow up" },
-];
+export class MailRequestError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public retryAfter = 0,
+  ) {
+    super(message);
+  }
+}
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error ?? `HTTP ${res.status}`);
+  if (!res.ok) {
+    const rawDelay = res.headers.get("retry-after") ?? "";
+    const delay = /^\d+$/.test(rawDelay)
+      ? Number(rawDelay) * 1000
+      : Math.max(0, Date.parse(rawDelay) - Date.now()) || 0;
+    throw new MailRequestError(
+      data.error ?? `HTTP ${res.status}`,
+      res.status,
+      Math.min(delay, 60_000),
+    );
+  }
   return data as T;
 }
 
@@ -114,15 +154,46 @@ export function useContactsQuery(
   });
 }
 
-export function useAccountsQuery(enabled: boolean) {
-  return useQuery({
-    queryKey: accountsQueryKey,
+export function useAccountsQuery(enabled: boolean, userId?: string) {
+  const query = useQuery({
+    queryKey: [...accountsQueryKey, userId ?? "current"],
     enabled,
     queryFn: async () => {
       const data = await fetchJson<{ accounts?: Account[] }>("/api/accounts");
       return data.accounts ?? [];
     },
   });
+  const profiles = useQueries({
+    queries: (query.data ?? []).map((account) => ({
+      queryKey: ["account-profile", account.accountId, userId ?? "current"],
+      enabled,
+      staleTime: 60_000,
+      retry: mailRetry,
+      retryDelay: mailRetryDelay,
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        limitMailRequest(async () => {
+          const data = await fetchJson<{ account: Partial<Account> }>(
+            `/api/accounts?${new URLSearchParams({ accountId: account.accountId })}`,
+            { signal },
+          );
+          return data.account;
+        }, signal),
+    })),
+  });
+  return {
+    ...query,
+    data: query.data?.map((account, index) =>
+      profiles[index]?.data
+        ? mergeAccountProfile(account, profiles[index].data)
+        : profiles[index]?.isError
+          ? {
+              ...account,
+              status: "unavailable" as const,
+              error: profiles[index].error?.message,
+            }
+          : account,
+    ),
+  };
 }
 
 // Folder listing and in-pane search use separate cache keys so toggling search doesn't clobber the folder list.
@@ -138,6 +209,95 @@ export const emailsQueryKey = (
 export type EmailsPage = { emails: ThreadRowEmail[]; nextPageToken?: string };
 export type EmailsData = InfiniteData<EmailsPage>;
 
+const limitMailRequest = createRequestLimiter(3);
+export const mailRetry = (count: number, error: Error) =>
+  count < 2 &&
+  (!(error instanceof MailRequestError) ||
+    error.status === 429 ||
+    error.status >= 500);
+export const mailRetryDelay = (attempt: number, error: Error) =>
+  Math.max(
+    error instanceof MailRequestError ? error.retryAfter : 0,
+    Math.min(1000 * 2 ** attempt, 10_000),
+  );
+
+export function fetchEmailsPage({
+  accountId,
+  folder,
+  q,
+  pageToken,
+  signal,
+  globalSearch = false,
+}: {
+  accountId: string;
+  folder: Folder;
+  q?: string;
+  pageToken?: string;
+  signal?: AbortSignal;
+  globalSearch?: boolean;
+}): Promise<EmailsPage> {
+  return limitMailRequest(async () => {
+    signal?.throwIfAborted();
+    if (isTestAccount(accountId)) {
+      await sleep(LIST_LATENCY_MS);
+      signal?.throwIfAborted();
+      const emails = makeTestEmails(accountId, folder).map((email) => ({
+        ...email,
+        internalDate: email.internalDate ?? Date.parse(email.date),
+      }));
+      const matches = q
+        ? emails.filter((email) =>
+            [email.subject, email.from, email.snippet ?? ""].some((field) =>
+              field.toLowerCase().includes(q.toLowerCase()),
+            ),
+          )
+        : emails;
+      const offset = Number(pageToken ?? 0);
+      return {
+        emails: matches.slice(offset, offset + 10),
+        nextPageToken:
+          matches.length > offset + 10 ? String(offset + 10) : undefined,
+      };
+    }
+    const params = new URLSearchParams({ accountId, max: "10" });
+    if (q?.trim())
+      params.set(
+        "q",
+        globalSearch ? q.trim() : `${FOLDER_QUERY[folder]} ${q.trim()}`,
+      );
+    else params.set("folder", folder);
+    if (pageToken) params.set("pageToken", pageToken);
+    const data = await fetchJson<{
+      emails?: ThreadRowEmail[];
+      nextPageToken?: string | null;
+    }>(`/api/emails?${params}`, { signal });
+    if (pageToken && data.nextPageToken === pageToken)
+      throw new MailRequestError(
+        "Gmail did not advance to the next page. Retry this account.",
+        502,
+      );
+    return {
+      emails: data.emails ?? [],
+      nextPageToken: data.nextPageToken ?? undefined,
+    };
+  }, signal);
+}
+
+export function invalidateMailQueries(client: QueryClient, accountId: string) {
+  void client.invalidateQueries({ queryKey: ["account-profile", accountId] });
+  for (const prefix of [
+    "emails",
+    "emails-search",
+    "emails-label",
+    "email",
+    "thread",
+    "unified-mail",
+  ]) {
+    void client.invalidateQueries({ queryKey: [prefix, accountId] });
+  }
+  void client.invalidateQueries({ queryKey: accountsQueryKey });
+}
+
 export const flattenEmails = (data: EmailsData | undefined) =>
   data?.pages.flatMap((page) => page.emails);
 
@@ -152,35 +312,16 @@ export function useEmailsQuery(
     queryKey: emailsQueryKey(accountId, folder, search),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last: EmailsPage) => last.nextPageToken ?? undefined,
-    queryFn: async ({ pageParam }): Promise<EmailsPage> => {
-      if (isTestAccount(accountId)) {
-        await sleep(LIST_LATENCY_MS);
-        const list = makeTestEmails(accountId, folder);
-        if (!search) return { emails: list };
-        const needle = search.toLowerCase();
-        return {
-          emails: list.filter((email) =>
-            [email.subject, email.from, email.snippet ?? ""].some((field) =>
-              field.toLowerCase().includes(needle),
-            ),
-          ),
-        };
-      }
-      const pageQuery = pageParam
-        ? `&pageToken=${encodeURIComponent(pageParam)}`
-        : "";
-      const scope = search
-        ? `&q=${encodeURIComponent(`${FOLDER_QUERY[folder]} ${search}`)}`
-        : `&folder=${folder}`;
-      const data = await fetchJson<{
-        emails?: ThreadRowEmail[];
-        nextPageToken?: string | null;
-      }>(`/api/emails?accountId=${accountId}&max=50${scope}${pageQuery}`);
-      return {
-        emails: data.emails ?? [],
-        nextPageToken: data.nextPageToken ?? undefined,
-      };
-    },
+    retry: mailRetry,
+    retryDelay: mailRetryDelay,
+    queryFn: ({ pageParam, signal }) =>
+      fetchEmailsPage({
+        accountId,
+        folder,
+        q: search,
+        pageToken: pageParam,
+        signal,
+      }),
   });
 }
 
@@ -194,26 +335,21 @@ export function useLabelEmailsQuery(
     enabled,
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (last: EmailsPage) => last.nextPageToken ?? undefined,
-    queryFn: async ({ pageParam }): Promise<EmailsPage> => {
+    retry: mailRetry,
+    retryDelay: mailRetryDelay,
+    queryFn: async ({ pageParam, signal }): Promise<EmailsPage> => {
       if (isTestAccount(accountId)) {
         await sleep(READ_LATENCY_MS);
         return { emails: testLabelEmails(accountId, label.id) };
       }
-      const pageQuery = pageParam
-        ? `&pageToken=${encodeURIComponent(pageParam)}`
-        : "";
-      const data = await fetchJson<{
-        emails?: ThreadRowEmail[];
-        nextPageToken?: string | null;
-      }>(
-        `/api/emails?accountId=${accountId}&max=50&q=${encodeURIComponent(
-          `label:"${label.name}"`,
-        )}${pageQuery}`,
-      );
-      return {
-        emails: data.emails ?? [],
-        nextPageToken: data.nextPageToken ?? undefined,
-      };
+      return fetchEmailsPage({
+        accountId,
+        folder: "labeled",
+        q: `label:"${label.name.replace(/["\\]/g, "\\$&")}"`,
+        pageToken: pageParam,
+        signal,
+        globalSearch: true,
+      });
     },
   });
 }
@@ -302,11 +438,11 @@ export function useRawEmailQuery(
 export const labelsQueryKey = (accountId: string) =>
   ["labels", accountId] as const;
 
-function labelsQueryOptions(accountId: string) {
+export function labelsQueryOptions(accountId: string) {
   return {
     queryKey: labelsQueryKey(accountId),
     queryFn: async (): Promise<Label[]> => {
-      if (isTestAccount(accountId)) return TEST_LABELS;
+      if (isTestAccount(accountId)) return getTestLabels(accountId);
       const data = await fetchJson<{
         labels?: {
           id: string;
@@ -347,7 +483,7 @@ export async function createLabel(
   name: string,
 ): Promise<Label> {
   if (isTestAccount(accountId)) {
-    return { id: `Label_${name.replace(/\s+/g, "_")}_${name.length}`, name };
+    return createTestLabel(accountId, name);
   }
   const data = await fetchJson<{ label: Label }>("/api/labels", {
     method: "POST",
@@ -362,7 +498,10 @@ export async function renameLabel(
   labelId: string,
   name: string,
 ) {
-  if (isTestAccount(accountId)) return;
+  if (isTestAccount(accountId)) {
+    renameTestLabel(accountId, labelId, name);
+    return;
+  }
   await fetchJson("/api/labels", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -415,24 +554,30 @@ export async function sendNewEmail(options: {
   inReplyTo?: string;
   references?: string;
   threadId?: string;
-  attachments?: { filename: string; mimeType: string; contentBase64: string }[];
+  draftId?: string;
+  attachments?: {
+    filename: string;
+    mimeType: string;
+    contentBase64: string;
+    contentId?: string;
+  }[];
 }) {
-  if (isTestAccount(options.accountId)) return;
+  if (isTestAccount(options.accountId)) return { simulated: true };
   // Owner "Simulate send": resolve as success without hitting Gmail. The short
   // delay keeps the composer's "Sending…" state visible so the demo looks real.
   if (isSendingDisabled()) {
     await new Promise((resolve) => setTimeout(resolve, 600));
-    return;
+    return { simulated: true };
   }
   await fetchJson("/api/send", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(options),
   });
+  return { simulated: false };
 }
 
-/** Save composer content as a draft; returns the draft id. Demo-only — real Gmail
- *  draft persistence isn't wired yet (no-op there). */
+/** Save composer content to the same Gmail draft, without storing mail locally. */
 export async function saveDraft(opts: {
   accountId: string;
   id?: string;
@@ -444,6 +589,14 @@ export async function saveDraft(opts: {
   subject: string;
   html: string;
   threadId?: string;
+  inReplyTo?: string;
+  references?: string;
+  attachments?: {
+    filename: string;
+    mimeType: string;
+    contentBase64: string;
+    contentId?: string;
+  }[];
 }): Promise<{ draftId: string; messageId: string } | null> {
   if (isTestAccount(opts.accountId)) {
     const id = upsertTestDraft(opts);
@@ -464,6 +617,9 @@ export async function saveDraft(opts: {
           subject: opts.subject,
           html: opts.html,
           threadId: opts.threadId,
+          inReplyTo: opts.inReplyTo,
+          references: opts.references,
+          attachments: opts.attachments,
         }),
       },
     );

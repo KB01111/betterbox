@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "betterbox",
+  "account_id": "6ce14db19e722769ce97f9a987066f4b",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-10-29",
+  // Better Auth/Start use async_hooks and crypto; Gmail MIME uses Buffer.
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "observability": { "enabled": false },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "betterbox",
+      "database_id": "e97b4f71-24b6-43e2-ac68-f8811df7da52",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "ratelimits": [
+    { "name": "API_RATE_LIMITER", "namespace_id": "10129", "simple": { "limit": 240, "period": 60 } }
+  ],
+  "vars": { "IS_SELF_HOSTED": "true" }
+}

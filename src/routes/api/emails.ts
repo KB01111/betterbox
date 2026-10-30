@@ -1,108 +1,41 @@
 import { auth } from "@/lib/auth/auth";
-import {
-  listRecentEmails,
-  markAccountRead,
-  markEmailsRead,
-  searchEmails,
-} from "@/lib/gmail/api.server";
+import { GMAIL_PAGE_SIZE, listRecentEmails, markAccountRead, markEmailsRead } from "@/lib/gmail/api.server";
 import { getGoogleToken } from "@/lib/gmail/accounts.server";
 import { json, jsonError } from "@/lib/json-response";
 import { createFileRoute } from "@tanstack/react-router";
 import { FOLDER_QUERY, toFolder } from "@/lib/folders";
+import { ApiInputError, queryIdentifier, readJsonBody, identifierField, stringField } from "@/lib/request-security";
 
-export const Route = createFileRoute("/api/emails")({
-  server: {
-    handlers: {
-      GET: async ({ request }: { request: Request }) => {
-        const session = await auth.api.getSession({ headers: request.headers });
-        if (!session) return json({ error: "Not signed in" }, 401);
-
-        const url = new URL(request.url);
-        const accountId = url.searchParams.get("accountId") ?? undefined;
-        // Clamp so a crafted `max` can't amplify one request into a huge Gmail
-        // fan-out (Gmail itself caps at 500; we keep it tighter).
-        const max = Math.min(
-          Math.max(Number(url.searchParams.get("max")) || 50, 1),
-          100,
-        );
-        const pageToken = url.searchParams.get("pageToken") ?? undefined;
-        const q = url.searchParams.get("q")?.trim();
-        const folderQuery =
-          FOLDER_QUERY[toFolder(url.searchParams.get("folder"))];
-
-        const accessToken = await getGoogleToken(
-          request.headers,
-          session.user.id,
-          accountId,
-        );
-        if (!accessToken) return json({ error: "No Google access token" }, 403);
-
-        try {
-          if (q) {
-            const emails = await searchEmails(accessToken, q, max);
-            return json({
-              accountId: accountId ?? null,
-              count: emails.length,
-              emails,
-            });
-          }
-          const { emails, nextPageToken } = await listRecentEmails(
-            accessToken,
-            max,
-            pageToken,
-            folderQuery,
-          );
-          return json({
-            accountId: accountId ?? null,
-            count: emails.length,
-            emails,
-            nextPageToken: nextPageToken ?? null,
-          });
-        } catch (error) {
-          return jsonError("GET /api/emails", error);
-        }
-      },
-
-      /** Mark messages read: { accountId, ids } → batchModify -UNREAD. */
-      POST: async ({ request }: { request: Request }) => {
-        const session = await auth.api.getSession({ headers: request.headers });
-        if (!session) return json({ error: "Not signed in" }, 401);
-
-        const body = (await request.json().catch(() => null)) as {
-          accountId?: string;
-          ids?: unknown;
-          all?: boolean;
-        } | null;
-        if (!body?.accountId) {
-          return json({ error: "accountId is required" }, 400);
-        }
-        const ids = Array.isArray(body.ids)
-          ? body.ids.filter((id): id is string => typeof id === "string")
-          : [];
-        if (!body.all && ids.length === 0) {
-          return json({ error: "ids or all is required" }, 400);
-        }
-
-        const accessToken = await getGoogleToken(
-          request.headers,
-          session.user.id,
-          body.accountId,
-        );
-        if (!accessToken) return json({ error: "No Google access token" }, 403);
-
-        try {
-          let count: number;
-          if (body.all) {
-            count = await markAccountRead(accessToken);
-          } else {
-            await markEmailsRead(accessToken, ids);
-            count = ids.length;
-          }
-          return json({ ok: true, count });
-        } catch (error) {
-          return jsonError("POST /api/emails", error);
-        }
-      },
-    },
+export const Route = createFileRoute("/api/emails")({ server: { handlers: {
+  GET: async ({ request }: { request: Request }) => {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session) return json({ error: "Not signed in" }, 401);
+    const url = new URL(request.url);
+    const accountId = queryIdentifier(url, "accountId", true);
+    const requested = Number(url.searchParams.get("max")) || GMAIL_PAGE_SIZE;
+    const max = Math.min(Math.max(Math.floor(requested), 1), GMAIL_PAGE_SIZE);
+    const pageToken = stringField(Object.fromEntries(url.searchParams), "pageToken", 4096);
+    const q = stringField(Object.fromEntries(url.searchParams), "q", 2000)?.trim();
+    const accessToken = await getGoogleToken(request.headers, session.user.id, accountId);
+    try {
+      const page = await listRecentEmails(accessToken, max, pageToken, q || FOLDER_QUERY[toFolder(url.searchParams.get("folder"))]);
+      return json({ accountId, count: page.emails.length, emails: page.emails, nextPageToken: page.nextPageToken ?? null });
+    } catch (error) { return jsonError("list emails", error); }
   },
-});
+  POST: async ({ request }: { request: Request }) => {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (!session) return json({ error: "Not signed in" }, 401);
+    const body = await readJsonBody(request);
+    const accountId = identifierField(body, "accountId", true);
+    if (body.all !== undefined && typeof body.all !== "boolean") throw new ApiInputError(400, "Invalid all");
+    const ids = body.ids;
+    if (!body.all && (!Array.isArray(ids) || !ids.length || ids.length > 1000 || ids.some((id) => typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,200}$/.test(id)))) throw new ApiInputError(400, "Provide between 1 and 1000 valid message ids");
+    const token = await getGoogleToken(request.headers, session.user.id, accountId);
+    try {
+      let count: number;
+      if (body.all) count = await markAccountRead(token);
+      else { await markEmailsRead(token, ids as string[]); count = (ids as string[]).length; }
+      return json({ ok: true, count, bounded: body.all === true });
+    } catch (error) { return jsonError("mark emails read", error); }
+  },
+} } });

@@ -1,7 +1,8 @@
 import { auth } from "@/lib/auth/auth";
 import { getGmailSignature } from "@/lib/gmail/api.server";
 import { getGoogleToken } from "@/lib/gmail/accounts.server";
-import { json } from "@/lib/json-response";
+import { json, jsonError } from "@/lib/json-response";
+import { queryIdentifier, stringField } from "@/lib/request-security";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/api/gmail-signature")({
@@ -16,8 +17,12 @@ export const Route = createFileRoute("/api/gmail-signature")({
         if (!session) return json({ error: "Not signed in" }, 401);
 
         const url = new URL(request.url);
-        const accountId = url.searchParams.get("accountId") ?? undefined;
-        const email = url.searchParams.get("email") ?? undefined;
+        const accountId = queryIdentifier(url, "accountId");
+        const email = stringField(
+          { email: url.searchParams.get("email") ?? undefined },
+          "email",
+          320,
+        );
         const accessToken = await getGoogleToken(
           request.headers,
           session.user.id,
@@ -29,8 +34,8 @@ export const Route = createFileRoute("/api/gmail-signature")({
           return json({
             signature: await getGmailSignature(accessToken, email),
           });
-        } catch {
-          return json({ signature: "" });
+        } catch (error) {
+          return jsonError("read Gmail signature", error);
         }
       },
     },

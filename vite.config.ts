@@ -4,14 +4,14 @@ import viteReact from "@vitejs/plugin-react";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import tsconfigPaths from "vite-tsconfig-paths";
 import tailwindcss from "@tailwindcss/vite";
-import { nitro } from "nitro/vite";
+import { cloudflare } from "@cloudflare/vite-plugin";
 
 /**
  * Dev-only fix for email images. The reader loads proxied images as <img>
  * (`/api/image-proxy` and inline `/api/message` attachments), so the browser
  * sends `Sec-Fetch-Dest: image`. In the Vite dev server that routes the request
  * to the static-asset pipeline, which 404s and bypasses the server route — the
- * images then fall back to alt text. Production (Nitro) routes by path and is
+ * images then fall back to alt text. Production Workers route by path and are
  * unaffected. Normalizing the header on `/api/` requests lets them reach the
  * handler in dev. The proxy's SSRF and cross-site guards are untouched.
  */
@@ -37,10 +37,10 @@ function devApiImageDest(): Plugin {
 export default defineConfig({
   plugins: [
     devApiImageDest(),
+    cloudflare({ viteEnvironment: { name: "ssr" } }),
     tailwindcss(),
     tsconfigPaths({ projects: ["./tsconfig.json"] }),
     tanstackStart(),
     viteReact(),
-    nitro(),
   ],
 });

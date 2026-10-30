@@ -3,6 +3,8 @@
  *  rather than showing a flat list. */
 export type Folder =
   | "inbox"
+  | "unread"
+  | "starred"
   | "labeled"
   | "sent"
   | "drafts"
@@ -12,6 +14,8 @@ export type Folder =
 
 export const FOLDERS: Folder[] = [
   "inbox",
+  "unread",
+  "starred",
   "labeled",
   "sent",
   "drafts",
@@ -22,6 +26,8 @@ export const FOLDERS: Folder[] = [
 
 export const FOLDER_QUERY: Record<Folder, string> = {
   inbox: "in:inbox",
+  unread: "is:unread -in:trash -in:spam",
+  starred: "is:starred -in:trash -in:spam",
   // Any message carrying a user label (the accordion view groups these by tag).
   labeled: "has:userlabels",
   sent: "in:sent",

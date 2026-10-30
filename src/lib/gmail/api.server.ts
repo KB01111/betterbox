@@ -1,13 +1,27 @@
 import { randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
 
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const METADATA_HEADERS = ["Subject", "From", "Date"];
+export const GMAIL_PAGE_SIZE = 10;
+const budgets = new AsyncLocalStorage<{ remaining: number; signal?: AbortSignal }>();
+export function withGmailBudget<T>(run: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  return budgets.getStore() ? run() : budgets.run({ remaining: 40, signal }, run);
+}
+export class GmailApiError extends Error {
+  constructor(public status: number) {
+    super(status === 401 || status === 403 ? "Reconnect this Google account and grant Gmail access." : status === 429 ? "Gmail is rate limited. Wait before retrying." : "Gmail is temporarily unavailable. Retry this account.");
+  }
+}
 
 export type Email = {
   id: string;
   from: string;
   subject: string;
   date: string;
+  internalDate: number;
+  starred: boolean;
+  hasAttachment: boolean;
   snippet?: string;
   unread?: boolean;
   /** Never persisted. */
@@ -23,7 +37,7 @@ export type GmailLabel = {
 
 export async function listLabels(accessToken: string): Promise<GmailLabel[]> {
   const res = await gmailFetch(accessToken, "/labels");
-  if (!res.ok) throw new Error(`Gmail labels list failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   const { labels = [] } = (await res.json()) as { labels?: GmailLabel[] };
   return labels;
 }
@@ -41,7 +55,7 @@ export async function createLabel(
       messageListVisibility: "show",
     }),
   });
-  if (!res.ok) throw new Error(`Gmail label create failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   return (await res.json()) as GmailLabel;
 }
 
@@ -55,7 +69,7 @@ export async function renameLabel(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ name }),
   });
-  if (!res.ok) throw new Error(`Gmail label rename failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   return (await res.json()) as GmailLabel;
 }
 
@@ -67,7 +81,7 @@ export async function deleteLabel(
   const res = await gmailFetch(accessToken, `/labels/${id}`, {
     method: "DELETE",
   });
-  if (!res.ok) throw new Error(`Gmail label delete failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
 }
 
 export async function modifyMessageLabels(
@@ -81,12 +95,12 @@ export async function modifyMessageLabels(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ addLabelIds: add, removeLabelIds: remove }),
   });
-  if (!res.ok) throw new Error(`Gmail modify labels failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
 }
 
 export async function getEmailAddress(accessToken: string): Promise<string> {
   const res = await gmailFetch(accessToken, "/profile");
-  if (!res.ok) return "";
+  if (!res.ok) throw new GmailApiError(res.status);
   const { emailAddress } = (await res.json()) as { emailAddress?: string };
   return emailAddress ?? "";
 }
@@ -122,34 +136,37 @@ export async function getGmailSignature(
 
 export async function getInboxUnread(accessToken: string): Promise<number> {
   const res = await gmailFetch(accessToken, "/labels/INBOX");
-  if (!res.ok) return 0;
+  if (!res.ok) throw new GmailApiError(res.status);
   const { messagesUnread } = (await res.json()) as { messagesUnread?: number };
   return messagesUnread ?? 0;
 }
 
 export async function listRecentEmails(
   accessToken: string,
-  max = 50,
+  max = GMAIL_PAGE_SIZE,
   pageToken?: string,
   q?: string,
 ): Promise<{ emails: Email[]; nextPageToken?: string }> {
+  return withGmailBudget(async () => {
   const { ids, nextPageToken } = await listMessageIds(
     accessToken,
-    max,
+    Math.min(Math.max(Math.floor(max) || GMAIL_PAGE_SIZE, 1), GMAIL_PAGE_SIZE),
     pageToken,
     q,
   );
-  const emails = await mapPool(ids, 8, (id) => fetchEmail(accessToken, id));
+  const emails = await mapPool(ids, 3, (id) => fetchEmail(accessToken, id));
+  emails.sort((a, b) => b.internalDate - a.internalDate || a.id.localeCompare(b.id));
   return { emails, nextPageToken };
+  });
 }
 
 export async function searchEmails(
   accessToken: string,
   q: string,
-  max = 8,
-): Promise<Email[]> {
-  const { ids } = await listMessageIds(accessToken, max, undefined, q);
-  return mapPool(ids, 8, (id) => fetchEmail(accessToken, id));
+  max = GMAIL_PAGE_SIZE,
+  pageToken?: string,
+): Promise<{ emails: Email[]; nextPageToken?: string }> {
+  return listRecentEmails(accessToken, max, pageToken, q);
 }
 
 export type Contact = { name: string; email: string };
@@ -157,8 +174,8 @@ export type Contact = { name: string; email: string };
 /** People you've emailed before — recipients pulled from recent Sent messages,
  *  ranked by how often they appear. Powers the compose To autocomplete. */
 export async function listContacts(accessToken: string): Promise<Contact[]> {
-  const { ids } = await listMessageIds(accessToken, 40, undefined, "in:sent");
-  const lists = await mapPool(ids, 8, (id) => fetchRecipients(accessToken, id));
+  const { ids } = await listMessageIds(accessToken, 10, undefined, "in:sent");
+  const lists = await mapPool(ids, 3, (id) => fetchRecipients(accessToken, id));
   const byEmail = new Map<string, { name: string; email: string; n: number }>();
   for (const recipients of lists) {
     for (const r of recipients) {
@@ -219,11 +236,11 @@ async function listMessageIds(
   q?: string,
 ): Promise<{ ids: string[]; nextPageToken?: string }> {
   const query =
-    `/messages?maxResults=${max}` +
+    `/messages?maxResults=${max}&includeSpamTrash=true` +
     (pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "") +
     (q ? `&q=${encodeURIComponent(q)}` : "");
   const res = await gmailFetch(accessToken, query);
-  if (!res.ok) throw new Error(`Gmail list failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   const { messages = [], nextPageToken } = (await res.json()) as {
     messages?: { id: string }[];
     nextPageToken?: string;
@@ -235,23 +252,16 @@ async function fetchEmail(accessToken: string, id: string): Promise<Email> {
   const headers = METADATA_HEADERS.map((h) => `metadataHeaders=${h}`).join("&");
   const res = await gmailFetchOk(
     accessToken,
-    `/messages/${id}?format=metadata&${headers}`,
+    `/messages/${encodeURIComponent(id)}?format=full&fields=id,internalDate,snippet,labelIds,payload(headers,filename,parts(filename,parts(filename,parts(filename))))&${headers}`,
   );
   if (!res.ok) {
-    // Couldn't load even after retries; mark it so it's not a silent
-    // "(no subject)" masquerading as a real, empty email.
-    return {
-      id,
-      from: "",
-      subject: "(couldn’t load)",
-      date: "",
-      unread: false,
-    };
+    throw new GmailApiError(res.status);
   }
   const message = (await res.json()) as {
     snippet?: string;
     labelIds?: string[];
-    payload?: { headers?: { name: string; value: string }[] };
+    internalDate?: string;
+    payload?: MessagePart;
   };
   // Gmail keeps headers in sender-chosen casing, so match case-insensitively —
   // else some messages render as "(no subject)" with no sender.
@@ -265,6 +275,9 @@ async function fetchEmail(accessToken: string, id: string): Promise<Email> {
     from: header("From"),
     subject: header("Subject"),
     date: header("Date"),
+    internalDate: Number(message.internalDate) || 0,
+    starred: message.labelIds?.includes("STARRED") ?? false,
+    hasAttachment: message.payload ? hasAttachmentPart(message.payload) : false,
     snippet: message.snippet
       ? decodeEntities(message.snippet)
       : message.snippet,
@@ -276,6 +289,9 @@ async function fetchEmail(accessToken: string, id: string): Promise<Email> {
 export type FullEmail = Email & {
   to: string;
   cc: string;
+  bcc: string;
+  replyTo: string;
+  inReplyTo: string;
   messageId: string;
   /** Used to thread replies. */
   threadId: string;
@@ -301,7 +317,7 @@ type MessagePart = {
 };
 
 /** An inline (Content-ID) attachment — fetched on demand to render cid: images. */
-export type InlineAttachment = { attachmentId: string; mimeType: string };
+export type InlineAttachment = { attachmentId: string; mimeType: string; filename?: string; size?: number; data?: string };
 
 /** A named, downloadable attachment (the paperclip kind, not inline images). */
 export type AttachmentMeta = {
@@ -309,6 +325,8 @@ export type AttachmentMeta = {
   filename: string;
   mimeType: string;
   size: number;
+  contentId?: string;
+  data?: string;
 };
 
 type RawMessage = {
@@ -316,6 +334,7 @@ type RawMessage = {
   snippet?: string;
   labelIds?: string[];
   threadId?: string;
+  internalDate?: string;
   payload?: MessagePart & { headers?: { name: string; value: string }[] };
 };
 
@@ -330,8 +349,12 @@ function parseMessage(message: RawMessage): FullEmail {
     from: header("From"),
     to: header("To"),
     cc: header("Cc"),
+    bcc: header("Bcc"),
+    replyTo: header("Reply-To"),
+    inReplyTo: header("In-Reply-To"),
     subject: header("Subject"),
     date: header("Date"),
+    internalDate: Number(message.internalDate) || 0,
     messageId: header("Message-ID"),
     threadId: message.threadId ?? "",
     references: header("References"),
@@ -363,11 +386,14 @@ function collectInline(
   const cid = part.headers?.find(
     (h) => h.name.toLowerCase() === "content-id",
   )?.value;
-  if (cid && part.body?.attachmentId) {
+  if (cid && (part.body?.attachmentId || part.body?.data)) {
     const key = cid.trim().replace(/^<|>$/g, "");
     out[key] = {
-      attachmentId: part.body.attachmentId,
+      attachmentId: part.body.attachmentId ?? "",
       mimeType: part.mimeType ?? "application/octet-stream",
+      filename: part.filename,
+      size: part.body.size,
+      data: part.body.data,
     };
   }
   for (const child of part.parts ?? []) collectInline(child, out);
@@ -384,12 +410,13 @@ function collectAttachments(
   const hasCid = part.headers?.some(
     (h) => h.name.toLowerCase() === "content-id",
   );
-  if (part.filename && part.body?.attachmentId && !hasCid) {
+  if (part.filename && (part.body?.attachmentId || part.body?.data) && !hasCid) {
     out.push({
-      attachmentId: part.body.attachmentId,
+      attachmentId: part.body.attachmentId ?? "",
       filename: part.filename,
       mimeType: part.mimeType ?? "application/octet-stream",
       size: part.body.size ?? 0,
+      data: part.body.data,
     });
   }
   for (const child of part.parts ?? []) collectAttachments(child, out);
@@ -406,7 +433,7 @@ export async function getAttachment(
     accessToken,
     `/messages/${messageId}/attachments/${attachmentId}`,
   );
-  if (!res.ok) throw new Error(`Gmail attachment failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   const { data = "" } = (await res.json()) as { data?: string };
   const buf = Buffer.from(data, "base64url");
   return buf.buffer.slice(
@@ -420,7 +447,7 @@ export async function getFullEmail(
   id: string,
 ): Promise<FullEmail> {
   const res = await gmailFetch(accessToken, `/messages/${id}?format=full`);
-  if (!res.ok) throw new Error(`Gmail get failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   return parseMessage(await res.json());
 }
 
@@ -429,7 +456,7 @@ export async function getThread(
   threadId: string,
 ): Promise<FullEmail[]> {
   const res = await gmailFetch(accessToken, `/threads/${threadId}?format=full`);
-  if (!res.ok) throw new Error(`Gmail thread get failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   const data = (await res.json()) as { messages?: RawMessage[] };
   return (data.messages ?? []).map(parseMessage);
 }
@@ -508,7 +535,7 @@ export async function getRawEmail(
   id: string,
 ): Promise<string> {
   const res = await gmailFetch(accessToken, `/messages/${id}?format=raw`);
-  if (!res.ok) throw new Error(`Gmail get failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   const { raw = "" } = (await res.json()) as { raw?: string };
   return Buffer.from(raw, "base64url").toString("utf8");
 }
@@ -516,6 +543,7 @@ export async function getRawEmail(
 /** Outgoing message. `html` → multipart/alternative with plain-text fallback;
  *  inReplyTo/references/threadId thread it as a real reply. */
 type OutgoingMessage = {
+  draftId?: string;
   to: string;
   cc?: string;
   bcc?: string;
@@ -525,7 +553,7 @@ type OutgoingMessage = {
   inReplyTo?: string;
   references?: string;
   threadId?: string;
-  attachments?: { filename: string; mimeType: string; contentBase64: string }[];
+  attachments?: { filename: string; mimeType: string; contentBase64: string; contentId?: string }[];
 };
 
 /** Build the raw base64url MIME for a message — shared by send + draft save. */
@@ -544,7 +572,7 @@ async function buildRawMessage(
   const headerLines = [
     `From: ${headerSafe(from)}`,
     `To: ${headerSafe(options.to)}`,
-    `Subject: ${encodeSubject(options.subject)}`,
+    `Subject: ${encodeSubject(headerSafe(options.subject))}`,
     "MIME-Version: 1.0",
   ];
   // Cc is visible to every recipient (unlike Bcc); reply-all carries it over.
@@ -620,7 +648,8 @@ async function buildRawMessage(
         `--${mixed}`,
         `Content-Type: ${headerSafe(att.mimeType || "application/octet-stream")}; name="${name}"`,
         "Content-Transfer-Encoding: base64",
-        `Content-Disposition: attachment; filename="${name}"`,
+        `Content-Disposition: ${att.contentId ? "inline" : "attachment"}; filename="${name}"`,
+        ...(att.contentId ? [`Content-ID: <${headerSafe(att.contentId).replace(/[<>]/g, "")}>`] : []),
         "",
         data,
       );
@@ -637,6 +666,12 @@ export async function sendEmail(
   accessToken: string,
   options: OutgoingMessage,
 ): Promise<void> {
+  if (options.draftId) {
+    await saveGmailDraft(accessToken, options);
+    const sent = await gmailFetch(accessToken, "/drafts/send", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ id: options.draftId }) });
+    if (!sent.ok) throw new GmailApiError(sent.status);
+    return;
+  }
   const raw = await buildRawMessage(accessToken, options);
   const payload: { raw: string; threadId?: string } = { raw };
   if (options.threadId) payload.threadId = options.threadId;
@@ -645,7 +680,7 @@ export async function sendEmail(
     headers: { "content-type": "application/json" },
     body: JSON.stringify(payload),
   });
-  if (!res.ok) throw new Error(`Gmail send failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
 }
 
 /** Create or update a Gmail draft. Returns draft + message ids so later autosaves
@@ -665,7 +700,7 @@ export async function saveGmailDraft(
       options.draftId ? { id: options.draftId, message } : { message },
     ),
   });
-  if (!res.ok) throw new Error(`Gmail draft save failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
   const data = (await res.json()) as { id: string; message?: { id: string } };
   return { id: data.id, messageId: data.message?.id ?? "" };
 }
@@ -689,7 +724,7 @@ export async function findGmailDraftId(
     });
     if (pageToken) params.set("pageToken", pageToken);
     const res = await gmailFetch(accessToken, `/drafts?${params}`);
-    if (!res.ok) throw new Error(`Gmail drafts list failed (${res.status})`);
+    if (!res.ok) throw new GmailApiError(res.status);
     const data = (await res.json()) as {
       drafts?: { id: string; message?: { id: string } }[];
       nextPageToken?: string;
@@ -702,32 +737,26 @@ export async function findGmailDraftId(
   return null;
 }
 
-export type MessageAction = "archive" | "trash" | "star" | "unstar";
+export type MessageAction = "archive" | "trash" | "star" | "unstar" | "read" | "unread" | "restore" | "spam" | "unspam" | "inbox";
 
 export async function actOnEmail(
   accessToken: string,
   id: string,
   action: MessageAction,
 ): Promise<void> {
-  const path =
-    action === "trash" ? `/messages/${id}/trash` : `/messages/${id}/modify`;
-  const body =
-    action === "trash"
-      ? undefined
-      : JSON.stringify(
-          action === "archive"
-            ? { removeLabelIds: ["INBOX"] }
-            : action === "star"
-              ? { addLabelIds: ["STARRED"] }
-              : { removeLabelIds: ["STARRED"] },
-        );
+  const labels = {
+    archive: { removeLabelIds: ["INBOX"] }, star: { addLabelIds: ["STARRED"] }, unstar: { removeLabelIds: ["STARRED"] }, read: { removeLabelIds: ["UNREAD"] }, unread: { addLabelIds: ["UNREAD"] }, spam: { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] }, unspam: { removeLabelIds: ["SPAM"], addLabelIds: ["INBOX"] }, inbox: { addLabelIds: ["INBOX"], removeLabelIds: ["SPAM", "TRASH"] },
+  };
+  const direct = action === "trash" || action === "restore";
+  const path = `/messages/${encodeURIComponent(id)}/${action === "trash" ? "trash" : action === "restore" ? "untrash" : "modify"}`;
+  const body = direct ? undefined : JSON.stringify(labels[action]);
 
   const res = await gmailFetch(accessToken, path, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body,
   });
-  if (!res.ok) throw new Error(`Gmail ${action} failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
 }
 
 /** RFC 2047 encoded-word for non-ASCII subjects. */
@@ -751,36 +780,55 @@ export async function markEmailsRead(
       removeLabelIds: ["UNREAD"],
     }),
   });
-  if (!res.ok) throw new Error(`Gmail batchModify failed (${res.status})`);
+  if (!res.ok) throw new GmailApiError(res.status);
 }
 
 /** Pages through all is:unread messages; capped at 10 000 to avoid hanging on a large mailbox. */
 export async function markAccountRead(accessToken: string): Promise<number> {
   let total = 0;
-  let pageToken: string | undefined;
-  do {
-    const { ids, nextPageToken } = await listMessageIds(
+  for (let page = 0; page < 15; page++) {
+    const { ids } = await listMessageIds(
       accessToken,
       500,
-      pageToken,
+      undefined,
       "is:unread",
     );
     if (ids.length === 0) break;
     await markEmailsRead(accessToken, ids);
     total += ids.length;
-    pageToken = nextPageToken;
-  } while (pageToken && total < 10000);
+  }
   return total;
 }
 
-function gmailFetch(accessToken: string, path: string, init?: RequestInit) {
-  return fetch(`${GMAIL}${path}`, {
+async function gmailFetch(accessToken: string, path: string, init?: RequestInit): Promise<Response> {
+  const budget = budgets.getStore();
+  const signal = budget?.signal ? AbortSignal.any([budget.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000);
+  const attempts = !init?.method || init.method === "GET" ? 3 : 1;
+  for (let attempt = 0; ; attempt++) {
+    if (budget) {
+      if (budget.remaining <= 0) throw new GmailApiError(429);
+      budget.remaining--;
+    }
+    const response = await fetch(`${GMAIL}${path}`, {
     ...init,
+    signal,
+    cache: "no-store",
     headers: {
       authorization: `Bearer ${accessToken}`,
       ...init?.headers,
     },
-  });
+    });
+    if ((response.status !== 429 && response.status < 500) || attempt + 1 >= attempts) return response;
+    const retryAfter = Number(response.headers.get("retry-after"));
+    await response.body?.cancel();
+    const delay = Math.min(2000, Math.max(250 * 2 ** attempt, Number.isFinite(retryAfter) ? retryAfter * 1000 : 0));
+    await new Promise<void>((resolve, reject) => {
+      const abort = () => { clearTimeout(timer); reject(signal.reason); };
+      const timer = setTimeout(() => { signal.removeEventListener("abort", abort); resolve(); }, delay);
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
+    });
+  }
 }
 
 /** gmailFetch that retries 429 / 5xx with backoff — burst rate-limit failures
@@ -789,15 +837,8 @@ async function gmailFetchOk(
   accessToken: string,
   path: string,
   init?: RequestInit,
-  attempts = 4,
 ): Promise<Response> {
-  let res = await gmailFetch(accessToken, path, init);
-  for (let i = 1; i < attempts; i++) {
-    if (res.ok || (res.status !== 429 && res.status < 500)) return res;
-    await new Promise((resolve) => setTimeout(resolve, 250 * 2 ** (i - 1)));
-    res = await gmailFetch(accessToken, path, init);
-  }
-  return res;
+  return gmailFetch(accessToken, path, init);
 }
 
 async function mapPool<T, R>(

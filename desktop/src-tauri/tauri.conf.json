@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "BetterBox",
+  "version": "0.2.1",
+  "identifier": "dev.kevinjbridgelal.betterbox",
+  "build": {},
+  "app": {
+    "windows": [],
+    "security": { "capabilities": ["hosted-auth"] }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "shortDescription": "BetterBox email desktop client",
+    "category": "Productivity",
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": { "installMode": "currentUser", "displayLanguageSelector": false }
+    }
+  }
+}

@@ -12,10 +12,16 @@ export function useAccountScope(accountIds: string[]) {
   const [stored, setStored] = useState<Stored>("all");
 
   useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return;
     try {
-      setStored(JSON.parse(raw) as Stored);
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed: unknown = JSON.parse(raw);
+      if (
+        parsed === "all" ||
+        (Array.isArray(parsed) &&
+          parsed.every((value) => typeof value === "string"))
+      )
+        setStored(parsed as Stored);
     } catch {
       // ignore corrupt state; fall back to all accounts
     }
@@ -36,6 +42,7 @@ export function useAccountScope(accountIds: string[]) {
       } else {
         const current = new Set(scopeIds);
         if (current.has(id)) {
+          if (current.size === 1) return;
           current.delete(id);
         } else {
           current.add(id);
@@ -43,7 +50,11 @@ export function useAccountScope(accountIds: string[]) {
         next = current.size === accountIds.length ? "all" : [...current];
       }
       setStored(next);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* In-memory scope remains usable. */
+      }
     },
     [scopeIds, accountIds],
   );
@@ -54,7 +65,11 @@ export function useAccountScope(accountIds: string[]) {
       if (!accountIds.includes(id)) return;
       const next: Stored = accountIds.length === 1 ? "all" : [id];
       setStored(next);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* In-memory scope remains usable. */
+      }
     },
     [accountIds],
   );

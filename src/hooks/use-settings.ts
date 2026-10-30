@@ -2,20 +2,17 @@ import { useEffect, useSyncExternalStore } from "react";
 import type { Density } from "@/components/mail/thread-row";
 
 export type AccentId =
-  | "orange"
-  | "blue"
-  | "teal"
-  | "purple"
-  | "green"
-  | "yellow";
+  "orange" | "blue" | "teal" | "purple" | "green" | "yellow";
 export type PreviewFont = "sans" | "mono";
 export type ExportFormat = "md" | "json" | "txt";
 export type Clock = "12h" | "24h";
 export type MarkRead = "off" | "instant" | "1s" | "5s";
 export type ReaderMode = "shared" | "split";
 export type ComposerMode = "popout" | "pane";
+export type MailView = "unified" | "board";
 
 export type Settings = {
+  mailView: MailView;
   density: Density;
   /** The gray body-text preview line in each message-list row. */
   showPreview: boolean;
@@ -47,6 +44,7 @@ export type Settings = {
 
 const STORAGE_KEY = "bm.settings";
 const DEFAULT_SETTINGS: Settings = {
+  mailView: "unified",
   density: "compact",
   showPreview: true,
   previewFont: "sans",

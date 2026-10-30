@@ -1,0 +1,25 @@
+[package]
+name = "betterbox-desktop"
+version = "0.2.1"
+edition = "2021"
+rust-version = "1.95"
+description = "BetterBox hosted mailbox desktop client"
+license = "MIT"
+
+[build-dependencies]
+tauri-build = { version = "=2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.5", features = [] }
+base64 = "0.22"
+rand = "0.8"
+sha2 = "0.10"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["time", "sync"] }
+url = "2"
+time = { version = "0.3", features = ["parsing"] }
+cookie = "0.18"
+rfd = "0.16"
+open = "5"

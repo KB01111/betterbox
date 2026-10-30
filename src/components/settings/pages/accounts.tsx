@@ -9,8 +9,9 @@ import {
   linkGoogle,
   useSession,
 } from "@/lib/auth/auth-client";
-import type { Account } from "@/lib/account";
+import { type Account, canDisconnectGoogleAccount } from "@/lib/account";
 import { accountsQueryKey } from "@/lib/mail-queries";
+import { isTestAccount } from "@/lib/test-account";
 import { setAccountColor, useSettings } from "@/hooks/use-settings";
 import { GithubMark } from "@/components/integrations/github-mark";
 import { ACCOUNT_COLORS } from "@/components/shell/account-dot";
@@ -35,9 +36,23 @@ function GithubIntegration() {
       return res.data ?? [];
     },
   });
-  const isLinked = (linked.data ?? []).some((a) => a.providerId === "github");
+  const githubAccount = (linked.data ?? []).find(
+    (a) => a.providerId === "github",
+  );
+  const isLinked = !!githubAccount;
   const unlink = useMutation({
-    mutationFn: () => authClient.unlinkAccount({ providerId: "github" }),
+    mutationFn: async () => {
+      if (!githubAccount) throw new Error("No GitHub account is connected");
+      const result = await authClient.unlinkAccount({
+        accountId: githubAccount.id,
+      });
+      if (result.error)
+        throw new Error(
+          "Could not disconnect GitHub. Sign in again and retry.",
+        );
+    },
+    onError: () =>
+      toast.error("Could not disconnect GitHub. Sign in again and retry."),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["linked-accounts"] });
       queryClient.invalidateQueries({ queryKey: ["pull-requests"] });
@@ -76,11 +91,13 @@ function DisconnectAccountButton({ account }: { account: Account }) {
   const label = account.email || account.accountId;
 
   const disconnect = useMutation({
-    mutationFn: () =>
-      authClient.unlinkAccount({
-        providerId: "google",
-        accountId: account.accountId,
-      }),
+    mutationFn: async () => {
+      if (!account.recordId)
+        throw new Error(
+          "Refresh connected accounts before disconnecting this mailbox.",
+        );
+      return authClient.unlinkAccount({ accountId: account.recordId });
+    },
     onSuccess: (res) => {
       if (res?.error) {
         toast.error("Couldn’t disconnect account", {
@@ -89,6 +106,9 @@ function DisconnectAccountButton({ account }: { account: Account }) {
         return;
       }
       queryClient.invalidateQueries({ queryKey: accountsQueryKey });
+      queryClient.removeQueries({
+        predicate: (query) => query.queryKey[1] === account.accountId,
+      });
       queryClient.invalidateQueries({ queryKey: ["linked-accounts"] });
       toast.success(`Disconnected ${label}`);
       setOpen(false);
@@ -190,12 +210,14 @@ export function AccountsPage({ accounts }: { accounts: Account[] }) {
                       </Hint>
                     ))}
                   </div>
-                  {/* Primary account is the signed-in identity — disconnecting
-                      would drop login, so it shows a lock in the disconnect slot
-                      (also keeps rows aligned). */}
+                  {/* Dummy mailboxes cannot replace a real Google sign-in identity. */}
                   {primaryEmail &&
-                    (isPrimary ? (
-                      <Hint label="Primary account — can’t be disconnected">
+                    !isTestAccount(account.accountId) &&
+                    (!canDisconnectGoogleAccount(
+                      accounts,
+                      account.accountId,
+                    ) ? (
+                      <Hint label="Keep at least one Google sign-in account connected">
                         <span className="inline-flex size-7 shrink-0 items-center justify-center text-muted-foreground opacity-70">
                           <Lock className="size-4" />
                         </span>
@@ -213,6 +235,17 @@ export function AccountsPage({ accounts }: { accounts: Account[] }) {
             </Button>
           </div>
         </div>
+      </PageSection>
+
+      <PageSection title="Native Gmail signatures">
+        <SettingRow
+          label="Import Gmail signature"
+          description="Optional: grant basic Gmail settings access to the account you choose. Existing BetterBox signatures need no extra permission."
+        >
+          <Button variant="outline" size="sm" onClick={() => linkGoogle(true)}>
+            Grant signature access
+          </Button>
+        </SettingRow>
       </PageSection>
 
       <PageSection title="Integrations">

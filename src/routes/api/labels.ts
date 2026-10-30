@@ -8,6 +8,13 @@ import {
 } from "@/lib/gmail/api.server";
 import { getGoogleToken } from "@/lib/gmail/accounts.server";
 import { json, jsonError } from "@/lib/json-response";
+import {
+  enumField,
+  identifierField,
+  queryIdentifier,
+  readJsonBody,
+  stringField,
+} from "@/lib/request-security";
 import { createFileRoute } from "@tanstack/react-router";
 
 /**
@@ -22,8 +29,7 @@ export const Route = createFileRoute("/api/labels")({
         const session = await auth.api.getSession({ headers: request.headers });
         if (!session) return json({ error: "Not signed in" }, 401);
 
-        const accountId =
-          new URL(request.url).searchParams.get("accountId") ?? undefined;
+        const accountId = queryIdentifier(new URL(request.url), "accountId");
         const accessToken = await getGoogleToken(
           request.headers,
           session.user.id,
@@ -42,13 +48,20 @@ export const Route = createFileRoute("/api/labels")({
         const session = await auth.api.getSession({ headers: request.headers });
         if (!session) return json({ error: "Not signed in" }, 401);
 
-        const body = (await request.json().catch(() => null)) as {
-          accountId?: string;
-          op?: "create" | "apply" | "remove" | "rename" | "delete";
-          name?: string;
-          id?: string;
-          labelId?: string;
-        } | null;
+        const raw = await readJsonBody(request);
+        const body = {
+          accountId: identifierField(raw, "accountId", true),
+          op: enumField(raw, "op", [
+            "create",
+            "apply",
+            "remove",
+            "rename",
+            "delete",
+          ]),
+          name: stringField(raw, "name", 225),
+          id: identifierField(raw, "id"),
+          labelId: identifierField(raw, "labelId"),
+        };
         if (!body?.accountId || !body.op) {
           return json({ error: "accountId and op are required" }, 400);
         }
